@@ -5366,6 +5366,7 @@ static void *Mesh_sysevent_handler(void *data)
 #ifdef WAN_FAILOVER_SUPPORTED
     async_id_t mesh_wfo_enabled_asyncid;
 #endif
+    async_id_t wifi_lease_asyncid;
 
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_RESET].sysStr,                     TUPLE_FLAG_EVENT);
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_RESET].sysStr,                     &wifi_init_asyncid);
@@ -5421,6 +5422,9 @@ static void *Mesh_sysevent_handler(void *data)
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WFO_ENABLED].sysStr,                     &mesh_wfo_enabled_asyncid);
 #endif
 
+    sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_DHCP_RESYNC_LEASES].sysStr,             TUPLE_FLAG_EVENT);
+    sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_DHCP_RESYNC_LEASES].sysStr,             &wifi_lease_asyncid);
+
     for (;;)
     {
         unsigned char name[64], val[256];
@@ -5438,6 +5442,8 @@ static void *Mesh_sysevent_handler(void *data)
         }
 
         err = sysevent_getnotification(sysevent_fd, sysevent_token, name, &namelen,  val, &vallen, &getnotification_asyncid);
+
+        MeshInfo("sysevent_getnotification: event=\"%s\" val=\"%s\"\n", name, val);
 
         if (err)
         {
@@ -6888,6 +6894,11 @@ static void *Mesh_sysevent_handler(void *data)
 
             }
 #endif //WAN_FAILOVER_SUPPORTED
+            else if (strcmp(name, meshSyncMsgArr[MESH_DHCP_RESYNC_LEASES].sysStr)==0)
+            {
+                MeshInfo("received notification event MESH_DHCP_RESYNC_LEASES: \"%s\"\n", name);
+                Mesh_sendDhcpLeaseSync();
+            }
             else
             {
                 MeshWarning("undefined event %s \n",name);
