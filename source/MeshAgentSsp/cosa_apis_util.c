@@ -206,9 +206,9 @@ int svcagt_get_service_state (const char *svc_name)
 	bool running;
 
 	MeshInfo("In svcagt_get_service_state\n");
-        exit_code =v_secure_system ("systemctl is-active %s.service", svc_name);
+	exit_code = v_secure_system ("pidof /usr/bin/dm");
 	if (exit_code == -1) {
-		CcspTraceError(("Error invoking systemctl command, errno: %s\n", strerror(errno)));
+		CcspTraceError(("Error invoking pidof /usr/bin/dm, errno: %s\n", strerror(errno)));
 		return -1;
 	}
 	running = (exit_code == 0);
@@ -233,9 +233,9 @@ int svcagt_set_service_state (const char *svc_name, bool state)
 
 	MeshInfo("%s %s\n", start_stop_msg, svc_name);
 
-	exit_code = v_secure_system ("systemctl %s %s.service", cmd_option, svc_name);
+	exit_code = v_secure_system ("/usr/plume/scripts/managers.init %s", cmd_option);
 	if (exit_code != 0)
-		CcspTraceError(("Command systemctl %s %s.service failed with exit %d, errno %s\n", cmd_option, svc_name, exit_code, strerror(errno)));
+		CcspTraceError(("Command /usr/plume/scripts/managers.init %s failed with exit %d, errno %s\n", cmd_option, exit_code, strerror(errno)));
 	return exit_code;
 }
 
