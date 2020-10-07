@@ -233,7 +233,11 @@ int svcagt_get_service_state (const char *svc_name)
 	bool running;
 	char cmdbuf[128] = {0};
         /* Coverity Fix CID :62962 DC.STRING_BUFFER  */
+	#if 0
 	snprintf (cmdbuf,sizeof(cmdbuf), "%s is-active %s.service", svcagt_systemctl_cmd, svc_name);
+	#else
+	snprintf(cmdbuf,sizeof(cmdbuf), "pidof /usr/bin/dm");
+	#endif
 	exit_code = system (cmdbuf);
 	if (exit_code == -1) {
 		CcspTraceError(("Error invoking systemctl command, errno: %s\n", strerror(errno)));
@@ -261,8 +265,12 @@ int svcagt_set_service_state (const char *svc_name, bool state)
 
 	MeshInfo(("%s %s\n", start_stop_msg, svc_name));
         /* Coverity Fix CID:58223 DC.STRING_BUFFER */
+	#if 0
 	snprintf (cmdbuf,sizeof(cmdbuf), "%s %s %s.service", 
 		svcagt_systemctl_cmd, cmd_option, svc_name); 
+	#else
+	snprintf(cmdbuf,sizeof(cmdbuf), "/usr/plume/scripts/managers.init %s", cmd_option);
+	#endif
 	exit_code = system (cmdbuf);
 	if (exit_code != 0)
 		CcspTraceError(("Command %s failed with exit %d, errno %s\n",
