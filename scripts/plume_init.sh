@@ -1,5 +1,9 @@
 #!/bin/sh
 
+if [ ! -f /tmp/wifi_first_init ]; then
+    exit 1
+fi
+
 while [ ! -f /tmp/meshagent_initialized ]
 do
     /bin/sleep 5
