@@ -18,14 +18,12 @@
 ##########################################################################
 AM_CFLAGS = -D_ANSC_LINUX
 AM_CFLAGS += -D_ANSC_USER
-AM_LDFLAGS = -lccsp_common -lwebconfig_framework
 
-AM_CPPFLAGS = -Wall -Werror
 ACLOCAL_AMFLAGS = -I m4
-hardware_platform = i686-linux-gnu
 
 bin_PROGRAMS = meshAgent
-meshAgent_CPPFLAGS = -I$(top_srcdir)/source/MeshAgentCore -I$(top_srcdir)/source/MeshAgentSsp -I$(top_srcdir)/source/include $(CPPFLAGS)
+
+meshAgent_CPPFLAGS = -I$(top_srcdir)/source/MeshAgentCore -I$(top_srcdir)/source/MeshAgentSsp -I$(top_srcdir)/source/include
 
 meshAgent_SOURCES = meshagent.c
 meshAgent_LDADD = ${top_builddir}/source/MeshAgentSsp/libMeshAgentSsp.la
