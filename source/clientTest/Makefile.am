@@ -17,14 +17,12 @@
 # limitations under the License.
 ##########################################################################
 # MeshAgent Process
-bin_PROGRAMS = meshQTest
 AM_CFLAGS = -D_ANSC_LINUX -D_ANSC_USER -D_ANSC_LITTLE_ENDIAN_
-AM_LDFLAGS = -lutapi -lutctx -lulog
 
-AM_CPPFLAGS = -Wall -Werror
 ACLOCAL_AMFLAGS = -I m4
 
-meshQTest_SOURCES = meshQTest.c
-meshQTest_LDFLAGS = -lutapi -lutctx -lulog -lpthread -lz -lrt
-meshQTest_CPPFLAGS = -I$(top_srcdir)/source/include $(CPPFLAGS)
+bin_PROGRAMS = meshQTest
 
+meshQTest_SOURCES = meshQTest.c
+meshQTest_CPPFLAGS = -I$(top_srcdir)/source/include
+meshQTest_LDFLAGS = -lutapi -lutctx -lulog -lpthread -lz -lrt
