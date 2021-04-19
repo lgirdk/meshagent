@@ -233,7 +233,7 @@ GreAcc_GetParamBoolValue
 {
     /* check the parameter name and return the corresponding value */
     PCOSA_DATAMODEL_MESHAGENT       pMyObject     = (PCOSA_DATAMODEL_MESHAGENT)g_pMeshAgent;
-    if( AnscEqualString(ParamName, "Enable", TRUE))
+    if (strcmp(ParamName, "Enable") == 0)
     {
         *pBool = g_pMeshAgent->GreAccEnable;
         return TRUE;
