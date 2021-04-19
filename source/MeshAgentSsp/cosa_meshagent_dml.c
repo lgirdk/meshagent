@@ -240,7 +240,7 @@ GreAcc_GetParamBoolValue
 {
     UNREFERENCED_PARAMETER(hInsContext);
     /* check the parameter name and return the corresponding value */
-    if( AnscEqualString(ParamName, "Enable", TRUE))
+    if (strcmp(ParamName, "Enable") == 0)
     {
         *pBool = g_pMeshAgent->GreAccEnable;
         return TRUE;
