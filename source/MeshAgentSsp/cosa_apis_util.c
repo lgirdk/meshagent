@@ -100,34 +100,9 @@ int Mesh_SyseventSetStr(const char *name, unsigned char *value, int bufsz, bool 
     {
         // Send to ARM
         #define DATA_SIZE 1024
-        FILE *fp1;
-        char buf[DATA_SIZE] = {0};
-        char cmd1[DATA_SIZE] = {0};
         char cmd2[DATA_SIZE] = {0};
-
-        // Grab the ATOM RPC IP address
-        sprintf(cmd1, "cat /etc/device.properties | grep ARM_ARPING_IP | cut -f 2 -d\"=\"");
-
-        fp1 = popen(cmd1, "r");
-        if (fp1 == NULL) {
-            MeshDebug("Error opening command pipe! \n");
-            return FALSE;
-        }
-
-        fgets(buf, DATA_SIZE, fp1);
-
-        buf[strcspn(buf, "\r\n")] = 0; // Strip off any carriage returns
-
-        if (buf[0] != 0 && strlen(buf) > 0) {
-            MeshDebug("Reported an ARM IP of %s \n", buf);
-            sprintf(cmd2, "rpcclient %s \"sysevent set %s \'%s\';\"", buf, name, value);
-            system(cmd2);
-        }
-
-        if (pclose(fp1) != 0) {
-            /* Error reported by pclose() */
-            CcspTraceError(("Error closing command pipe! \n"));
-        }
+        sprintf(cmd2, "rpcclient2 \"sysevent set %s \'%s\';\"",  name, value);
+        system(cmd2);
     }
 #endif
 
@@ -193,34 +168,9 @@ int Mesh_SysCfgSetStr(const char *name, unsigned char *str_value, bool toArm)
     {
         // Send event to ARM
         #define DATA_SIZE 1024
-        FILE *fp1 = NULL;
-        char buf[DATA_SIZE] = {0};
-        char cmd1[DATA_SIZE] = {0};
         char cmd2[DATA_SIZE] = {0};
-
-        // Grab the ATOM RPC IP address
-        sprintf(cmd1, "cat /etc/device.properties | grep ARM_ARPING_IP | cut -f 2 -d\"=\"");
-
-        fp1 = popen(cmd1, "r");
-        if (fp1 == NULL) {
-            MeshDebug("Error opening command pipe! \n");
-            return FALSE;
-        }
-
-        fgets(buf, DATA_SIZE, fp1);
-
-        buf[strcspn(buf, "\r\n")] = 0; // Strip off any carriage returns
-
-        if (buf[0] != 0 && strlen(buf) > 0) {
-            MeshDebug("Reported an ARM IP of %s \n", buf);
-            sprintf(cmd2, "rpcclient %s \"syscfg set %s \'%s\'; syscfg commit\"", buf, name, str_value);
-            system(cmd2);
-        }
-
-        if (pclose(fp1) != 0) {
-            /* Error reported by pclose() */
-            CcspTraceError(("Error closing command pipe! \n"));
-        }
+        sprintf(cmd2, "rpcclient2 \"syscfg set %s \'%s\'; syscfg commit\"", name, str_value);
+        system(cmd2);
     }
 #endif
    return retval;
