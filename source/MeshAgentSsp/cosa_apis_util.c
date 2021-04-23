@@ -85,30 +85,10 @@ int Mesh_SyseventSetStr(const char *name, unsigned char *value, int bufsz, bool 
     if (toArm)
     {
         // Send to ARM
-        #define DATA_SIZE 1024
-        FILE *fp1;
-        char buf[DATA_SIZE] = {0};
         int ret = 0;
-
-        // Grab the ATOM RPC IP address
-        fp1 = v_secure_popen("r", "cat /etc/device.properties | grep ARM_ARPING_IP | cut -f 2 -d'='");
-        if (fp1 == NULL) {
-            MeshDebug("Error opening command pipe! \n");
-            return FALSE;
-        }
-
-        fgets(buf, DATA_SIZE, fp1);
-
-        buf[strcspn(buf, "\r\n")] = 0; // Strip off any carriage returns
-
-        v_secure_pclose(fp1);
-
-        if (buf[0] != 0 && strlen(buf) > 0) {
-            MeshDebug("Reported an ARM IP of %s \n", buf);
-            ret = v_secure_system("rpcclient %s sysevent set %s '%s';", buf, name, value);
-            if(ret != 0) {
-                MeshDebug("Failure in executing command via v_secure_system. ret:[%d] \n", ret);
-            } 
+        ret = v_secure_system("rpcclient2 \"sysevent set %s '%s'\"", name, value);
+        if(ret != 0) {
+            MeshDebug("Failure in executing command via v_secure_system. ret:[%d] \n", ret);
         }
     }
 #endif
@@ -170,31 +150,10 @@ int Mesh_SysCfgSetStr(const char *name, unsigned char *str_value, bool toArm)
     if (toArm)
     {
         // Send event to ARM
-        #define DATA_SIZE 1024
-        FILE *fp1 = NULL;
-        char buf[DATA_SIZE] = {0};
         int ret = 0;
-
-        // Grab the ATOM RPC IP address
-
-        fp1 = v_secure_popen("r", "cat /etc/device.properties | grep ARM_ARPING_IP | cut -f 2 -d'='");
-        if (fp1 == NULL) {
-            MeshDebug("Error opening command pipe! \n");
-            return FALSE;
-        }
-
-        fgets(buf, DATA_SIZE, fp1);
-
-        buf[strcspn(buf, "\r\n")] = 0; // Strip off any carriage returns
-
-        v_secure_pclose(fp1);
-
-        if (buf[0] != 0 && strlen(buf) > 0) {
-            MeshDebug("Reported an ARM IP of %s \n", buf);
-            ret = v_secure_system("rpcclient %s \"syscfg set %s %s; syscfg commit\" &", buf, name,str_value);
-            if(ret != 0) {
-                MeshDebug("Failure in executing command via v_secure_system. ret:[%d] \n", ret);
-            }
+        ret = v_secure_system("rpcclient2 \"syscfg set %s %s; syscfg commit\" &", name, str_value);
+        if(ret != 0) {
+            MeshDebug("Failure in executing command via v_secure_system. ret:[%d] \n", ret);
         }
     }
 #endif
