@@ -17,6 +17,7 @@
  * limitations under the License.
 */
 
+#include <syscfg/syscfg.h>
 #include "cosa_webconfig_api.h"
 #include "meshagent.h"
 #include "meshsync_msgs.h"
