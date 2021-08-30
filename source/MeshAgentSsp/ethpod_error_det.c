@@ -140,7 +140,7 @@ bool meshHandleEvent(const char * pod_mac, EthPodEvent event) {
             break;
     }
 
-    return 0;
+    return true;
 }
 
 void meshHandleTimeout() {

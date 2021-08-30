@@ -104,6 +104,8 @@ const int MAX_MESSAGES=10;  // max number of messages the can be in the queue
 #define STATE_FALSE "false"
 #define LS_READ_TIMEOUT_MS 2000
 
+#define OVS_ENABLED    "/sys/module/openvswitch"
+
 static bool isPaceXF3 = false;
 static bool isSkyHUB4 = false;
 bool isXB3Platform = false;
@@ -724,7 +726,7 @@ static void Mesh_logLinkChange()
         return;
     }
 
-    if (access(POD_LINK_SCRIPT, F_OK) == 0) {        
+    if (access(POD_LINK_SCRIPT, F_OK) == 0) {
         rc= v_secure_system( POD_LINK_SCRIPT " &");
         if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
@@ -732,10 +734,106 @@ static void Mesh_logLinkChange()
         }
     }
 }
+
+int Mesh_CreateEthTunnel(int PodIdx, const char * bridge_ip, const char * pod_addr, const char * pod_dev, bool isOVSEnabled)
+{
+    int rc = -1;
+
+    MeshDebug("Entering %s with PodIdx = %d, bridge_ip = %s, pod_addr = %s, and pod_dev = %s\n", __FUNCTION__, PodIdx, bridge_ip, pod_addr, pod_dev);
+ 
+    if(isOVSEnabled) {
+        rc = v_secure_system("/usr/bin/ovs-vsctl del-port %s ethpod%d", MESHBHAUL_BR, PodIdx);
+    }
+    rc = v_secure_system("ip link del ethpod%d", PodIdx);
+    if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshWarning("Failed to delete ethpod%d, maybe it doesn't exist?\n", PodIdx);
+    }
+
+    rc = v_secure_system("ip link add ethpod%d type gretap local %s remote %s dev %s tos 1", PodIdx, bridge_ip, pod_addr, pod_dev);
+    if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to create ethpod%d GRE tap with local IP: %s and remote IP %s\n", PodIdx, bridge_ip, pod_addr);
+        return -1;
+    }
+
+    rc = v_secure_system("/sbin/ifconfig ethpod%d up", PodIdx);
+    if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to bring ethpod%d up", PodIdx);
+        return -1;
+    }
+
+    return 0;
+}
+
+int Mesh_EthBhaulPodVlanSetup(int PodIdx, bool isOvsMode)
+{
+    int rc = -1;
+
+    MeshDebug("Entering %s with PodIdx = %d, and isOvsMode = %s\n", __FUNCTION__, PodIdx, (isOvsMode ? "true" : "false"));
+
+    rc = v_secure_system("/sbin/vconfig add ethpod%d %d", PodIdx, XHS_VLAN);
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to create VLAN for XHS\n");
+        return rc;
+    }
+
+    rc = v_secure_system("/sbin/vconfig add ethpod%d %d", PodIdx, LNF_VLAN);
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to create VLAN for LNF\n");
+        return rc;
+    }
+
+    rc = v_secure_system("/sbin/ifconfig ethpod%d.%d up", PodIdx, XHS_VLAN);
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to bring up XHS VLAN interface\n");
+        return rc;
+    }
+
+    rc = v_secure_system("/sbin/ifconfig ethpod%d.%d up", PodIdx, LNF_VLAN);
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to bring up LNF VLAN interface\n");
+        return rc;
+    }
+
+    if(isOvsMode) {
+        rc = v_secure_system("/usr/bin/ovs-vsctl del-port %s ethpod%d.%d", XHS_BR, PodIdx, XHS_VLAN);
+        rc = v_secure_system("/usr/bin/ovs-vsctl add-port %s ethpod%d.%d", XHS_BR, PodIdx, XHS_VLAN);
+    } else {
+        rc = v_secure_system("brctl addif %s ethpod%d.%d", XHS_BR, PodIdx, XHS_VLAN);
+    }
+
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to add port (ethpod%d.%d) to XHS bridge (%s)\n", PodIdx, XHS_VLAN, XHS_BR);
+        return rc;
+    }
+
+    if(isOvsMode) {
+        rc = v_secure_system("/usr/bin/ovs-vsctl del-port %s ethpod%d.%d", (isPaceXF3 ? LNF_BR_XF3 : LNF_BR), PodIdx, LNF_VLAN);
+        rc = v_secure_system("/usr/bin/ovs-vsctl add-port %s ethpod%d.%d", (isPaceXF3 ? LNF_BR_XF3 : LNF_BR), PodIdx, LNF_VLAN);
+    } else {
+        rc = v_secure_system("brctl addif %s ethpod%d.%d", (isPaceXF3 ? LNF_BR_XF3 : LNF_BR), PodIdx, LNF_VLAN);
+    }
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to add port (ethpod%d.%d) to LNF bridge (%s)\n", PodIdx, LNF_VLAN, (isPaceXF3 ? LNF_BR_XF3 : LNF_BR));
+        return rc;
+    }
+
+    return 0;
+}
+
 static void Mesh_EthPodTunnel(PodTunnel *tunnel)
 {
     int rc = -1;
     int PodIdx = Mesh_getEthPodIndex(tunnel->podmac);
+    bool isOvsMode = access(OVS_ENABLED, F_OK) == 0;
 
     if(isXB3Platform) {
         MeshInfo("%s Trigger to create tunnel in XB3 platform\n", __FUNCTION__);
@@ -746,52 +844,31 @@ static void Mesh_EthPodTunnel(PodTunnel *tunnel)
         }
         return;
     }
- 
-    MeshInfo("ip link del ethpod%d; "
-            "ip link add ethpod%d type gretap local %s remote %s dev %s tos 1; "
-            "ifconfig ethpod%d up; "
-            "brctl addif %s ethpod%d; "
-            "vconfig add ethpod%d %d;vconfig add ethpod%d %d; "
-            "ifconfig ethpod%d.%d up;ifconfig ethpod%d.%d up; "
-            "brctl addif %s ethpod%d.%d;brctl addif %s ethpod%d.%d; " 
-            "Etheret bhaul Network cmd: $s\n",  PodIdx,
-            PodIdx, ETHBHAUL_BR_IP, tunnel->podaddr, tunnel->dev,
-            PodIdx,
-            MESHBHAUL_BR, PodIdx,
-            PodIdx, XHS_VLAN, PodIdx, LNF_VLAN,
-            PodIdx, XHS_VLAN, PodIdx, LNF_VLAN,
-            XHS_BR, PodIdx, XHS_VLAN, (isPaceXF3 ? LNF_BR_XF3 : LNF_BR), PodIdx, LNF_VLAN
-);
 
-    rc = v_secure_system("ip link del ethpod%d; "
-            "ip link add ethpod%d type gretap local %s remote %s dev %s tos 1; "
-            "ifconfig ethpod%d up; "
-            "brctl addif %s ethpod%d; "
-            "vconfig add ethpod%d %d;vconfig add ethpod%d %d; "
-            "ifconfig ethpod%d.%d up;ifconfig ethpod%d.%d up; "
-            "brctl addif %s ethpod%d.%d;brctl addif %s ethpod%d.%d",
-            PodIdx,
-            PodIdx, ETHBHAUL_BR_IP, tunnel->podaddr, tunnel->dev,
-            PodIdx,
-            MESHBHAUL_BR, PodIdx,
-            PodIdx, XHS_VLAN, PodIdx, LNF_VLAN,
-            PodIdx, XHS_VLAN, PodIdx, LNF_VLAN,
-            XHS_BR, PodIdx, XHS_VLAN, (isPaceXF3 ? LNF_BR_XF3 : LNF_BR), PodIdx, LNF_VLAN);
+    rc = Mesh_CreateEthTunnel(PodIdx, ETHBHAUL_BR_IP, tunnel->podaddr, tunnel->dev, isOvsMode);
+    if(rc < 0)
+    {
+        MeshError("Failed to create Ethernet pod tunnel\n");
+        return;
+    }
+
+    if(isOvsMode) {
+        rc = v_secure_system("/usr/bin/ovs-vsctl add-port %s ethpod%d", MESHBHAUL_BR, PodIdx);
+    } else {
+        rc = v_secure_system("brctl addif %s ethpod%d", MESHBHAUL_BR, PodIdx);
+    }
+
     if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
     {
-        MeshError("ip link del ethpod%d; "
-            "ip link add ethpod%d type gretap local %s remote %s dev %s tos 1; "
-            "ifconfig ethpod%d up; "
-            "brctl addif %s ethpod%d; "
-            "vconfig add ethpod%d %d;vconfig add ethpod%d %d; "
-            "ifconfig ethpod%d.%d up;ifconfig ethpod%d.%d up; "
-            "brctl addif %s ethpod%d.%d;brctl addif %s ethpod%d.%d; " ": tunnel create script fail rc = %d\n", PodIdx,
-            PodIdx, ETHBHAUL_BR_IP, tunnel->podaddr, tunnel->dev,
-            PodIdx,
-            MESHBHAUL_BR, PodIdx,
-            PodIdx, XHS_VLAN, PodIdx, LNF_VLAN,
-            PodIdx, XHS_VLAN, PodIdx, LNF_VLAN,
-            XHS_BR, PodIdx, XHS_VLAN, (isPaceXF3 ? LNF_BR_XF3 : LNF_BR), PodIdx, LNF_VLAN, WEXITSTATUS(rc));
+        MeshError("Failed to add ethpod%d to mesh backhaul bridge (%s) with error code: %d\n", PodIdx, MESHBHAUL_BR, rc);
+        return;
+    }
+
+    rc = Mesh_EthBhaulPodVlanSetup(PodIdx, isOvsMode);
+    if(rc < 0)
+    {
+        MeshError("Failed to setup ethernet backhaul VLAN, error code: %d\n", rc);
+        return;
     }
 
     if( (!isSkyHUB4) && (!gmssClamped) ) {

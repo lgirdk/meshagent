@@ -28,6 +28,7 @@ bin_PROGRAMS = MeshAgent_gtest.bin
 MeshAgent_gtest_bin_CPPFLAGS = -I$(PKG_CONFIG_SYSROOT_DIR)$(includedir)/gtest -I${top_srcdir}/gtest/include -I${top_srcdir}/source -I${top_srcdir}/source/include
 MeshAgent_gtest_bin_SOURCES = MeshAgentTest.cpp \
                               EthpodErrDet.cpp \
+                              MockUtils.cpp \
                               gtest_main.cpp
 MeshAgent_gtest_bin_LDADD = ${top_builddir}/source/MeshAgentSsp/libMeshAgentSsp.la
 MeshAgent_gtest_bin_LDFLAGS = -lgtest -lgmock -lgcov
