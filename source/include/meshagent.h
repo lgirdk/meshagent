@@ -51,21 +51,6 @@ typedef enum {
     UPDATE_LEASE
 } detectionMsg;
 
-
-typedef enum event_id {
-    EB_RFC_DISABLED, //When ethernet bhaul RFC is disabled but still pod is connected over ethernet.
-    EB_XHS_PORT,     //When pod is connected to etherent port configured for XHS.
-    EB_GENERIC_ISSUE, //To cover issues like wrong switch(not supporting vlan passthrough), link down, power cycle of switch etc..
-    EVENT_ID_MAX,
-} pod_event_id;
-
-typedef enum event_type {
-    ERROR, //When device wants to send error notification
-    INFO,  //When device wants to send valid info event notification
-    EVENT_TYPE_MAX,
-} pod_event_type;
-
-
 /**
  * @brief Initializes the Message Bus and registers component with the stack.
  *

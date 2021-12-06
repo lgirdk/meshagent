@@ -232,7 +232,6 @@ void changeChBandwidth( int, int);
 static void Mesh_ModifyPodTunnel(MeshTunnelSet *conf);
 static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf);
 BOOL is_configure_wifi_enabled();
-void initparodusTask();
 
 static char EthPodMacs[MAX_POD_COUNT][MAX_MAC_ADDR_LEN];
 static int eth_mac_count = 0;
@@ -4968,7 +4967,7 @@ int Mesh_Init(ANSC_HANDLE hThisObject)
     } 
     // Start message queue client thread (Communications to/from RDKB CcspWifiSsp)
 
-    initparodusTask();
+    parodusInit();
     // MeshInfo("Exiting from %s\n",__FUNCTION__);
     return status;
 }
