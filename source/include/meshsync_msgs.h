@@ -33,7 +33,7 @@
 #define MAX_MODE_LEN         25
 #define MAX_SUBNET_LEN       25
 #define MAX_IP_LEN           64
-#define MAX_URL_LEN          256
+#define MESH_MAX_URL_LEN          256
 #define MAX_TXRATE_LEN       256
 #define MAX_CHANNEL_MODE_LEN 32
 #define MAX_MAC_ADDR_LEN     18
@@ -264,7 +264,7 @@ typedef struct _MeshSubnetChange {
  * Mesh Sync URL configuration change message
  */
 typedef struct _MeshUrlChange {
-    char url[MAX_URL_LEN];  // url
+    char url[MESH_MAX_URL_LEN];  // url
 } MeshUrlChange;
 
 /**
