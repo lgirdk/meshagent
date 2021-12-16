@@ -39,6 +39,12 @@ start_plume() {
         exit 1
     fi
 
+    br_mode="`rpcclient2 'syscfg get bridge_mode' | tail -n 2 | head -n 1`"
+    if [ "$br_mode" != "0" ]; then
+        echo "In Bridge mode, opensync disabled"
+        exit 1
+    fi
+
     echo "Starting Plume manager"
 
     /usr/plume/scripts/managers.init start
