@@ -29,4 +29,4 @@ meshAgent_SOURCES = meshagent.c
 meshAgent_LDADD = ${top_builddir}/source/MeshAgentSsp/libMeshAgentSsp.la
 meshAgent_CFLAGS = $(SYSTEMD_CFLAGS) 
 meshAgent_CFLAGS += "-DFEATURE_SUPPORT_RDKLOG"
-meshAgent_LDFLAGS = -lccsp_common -ldl -rdynamic -lwebconfig_framework $(SYSTEMD_LDFLAGS) -llog4c
+meshAgent_LDFLAGS = -lccsp_common -ldl -rdynamic -lwebconfig_framework $(SYSTEMD_LDFLAGS) -llog4c -ltelemetry_msgsender

@@ -24,5 +24,5 @@ ACLOCAL_AMFLAGS = -I m4
 bin_PROGRAMS = meshQTest
 
 meshQTest_SOURCES = meshQTest.c
+meshQTest_CPPFLAGS = -I$(top_srcdir)/source/include
 meshQTest_LDFLAGS = -lutapi -lutctx -lulog -lpthread -lz -lrt
-meshQTest_CPPFLAGS = -I$(top_srcdir)/source/include $(CPPFLAGS)
