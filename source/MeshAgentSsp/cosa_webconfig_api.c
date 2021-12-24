@@ -25,6 +25,9 @@
 #include <syscfg/syscfg.h>
 #include "cosa_apis_util.h"
 
+static t_cache mb_cache;
+static t_cache mb_cache_bkup;
+
 const char meshService[] = "meshwifi";
 extern MeshSync_MsgItem meshSyncMsgArr[];
 extern COSA_DATAMODEL_MESHAGENT* g_pMeshAgent;
