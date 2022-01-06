@@ -3325,9 +3325,6 @@ static bool Mesh_Register_sysevent(ANSC_HANDLE hThisObject)
     int retry = 0;
     // MeshInfo("Entering into %s\n",__FUNCTION__);
 
-    // Initialize syscfg
-    syscfg_init();
-
     do
     {
         sysevent_fd = sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, "meshAgent", &sysevent_token);
