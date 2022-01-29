@@ -74,7 +74,6 @@ int  cmd_dispatch(int  command)
     {
         case    'e' :
 
-#ifdef _ANSC_LINUX
             MeshInfo("Connect to bus daemon...\n");
 
             {
@@ -94,7 +93,6 @@ int  cmd_dispatch(int  command)
                         				 CCSP_MSG_BUS_CFG,
 				                         gpMeshAgentCfg->DbusPath);
             }
-#endif
             ssp_create(gpMeshAgentCfg);
             ssp_engage(gpMeshAgentCfg);
             break;
@@ -207,7 +205,6 @@ int msgBusInit(const char *pComponentName)
 /*                             Internal functions                             */
 /*----------------------------------------------------------------------------*/
 
-#if defined(_ANSC_LINUX)
 
 /**
  * @brief daemonize is a continous loop running in the background waiting to cater component requests.
@@ -252,7 +249,6 @@ static void daemonize(void) {
 	}
 #endif
 }
-#endif
 
 int CheckAndGetDevicePropertiesEntry( char *pOutput, int size, char *sDevicePropContent )
 {
