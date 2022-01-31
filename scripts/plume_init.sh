@@ -46,6 +46,13 @@ stop_plume() {
     /usr/plume/scripts/managers.init stop
 }
 
+fd=205
+lockFile="/var/lock/$(basename $0)"
+eval exec "$fd"'>"$lockFile"'
+
+flock "$fd"
+(
+eval exec "$fd"'>&-'
 case $1 in
     start)
         start_plume
@@ -61,3 +68,4 @@ case $1 in
         echo "Usage: $0 {start|stop|restart}"
         ;;
 esac
+)
