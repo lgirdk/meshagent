@@ -179,9 +179,9 @@ int Mesh_SysCfgSetStr(const char *name, unsigned char *str_value, bool toArm)
 {
     UNREFERENCED_PARAMETER(toArm);
    int retval = 0;
-   if ((retval = syscfg_set(NULL, name, str_value)) == 0) {
-      retval = syscfg_commit();
-   }
+
+   retval = syscfg_set_commit(NULL, name, str_value);
+
 
 #if defined(_COSA_INTEL_USG_ATOM_)
     if (toArm)
