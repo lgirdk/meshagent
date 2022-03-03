@@ -168,33 +168,29 @@ MeshAgent_GetParamBoolValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
-    errno_t        rc = -1;
-    int            ind = -1;
-    /* check the parameter name and return the corresponding value */
-    rc = strcmp_s("Enable",strlen("Enable"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "Enable") == 0)
     {
         *pBool = g_pMeshAgent->meshEnable;
         return TRUE;
     }
-    rc = strcmp_s("PodEthernetBackhaulEnable",strlen("PodEthernetBackhaulEnable"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "PodEthernetBackhaulEnable") == 0)
     {
         MeshInfo("Pod ethernet bhaul mode get\n");
         *pBool = g_pMeshAgent->PodEthernetBackhaulEnable;
         return TRUE; 
     }
-    rc = strcmp_s("Opensync",strlen("Opensync"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "Opensync") == 0)
     {
 	MeshInfo("Opensync Enable get\n");
 	*pBool = g_pMeshAgent->OpensyncEnable;
 	return TRUE;
     }
-        MeshWarning(("Unsupported parameter '%s'\n"), ParamName);
+
+    MeshWarning(("Unsupported parameter '%s'\n"), ParamName);
+
     return FALSE;
 }
 
@@ -239,14 +235,15 @@ GreAcc_GetParamBoolValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
-    /* check the parameter name and return the corresponding value */
+
     if (strcmp(ParamName, "Enable") == 0)
     {
         *pBool = g_pMeshAgent->GreAccEnable;
         return TRUE;
     }
-    else
-     MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
+    MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
     return FALSE;
 }
 
@@ -289,18 +286,15 @@ OVS_GetParamBoolValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
-    errno_t rc = -1;
-    int ind = -1;
-    /* check the parameter name and return the corresponding value */
-    rc = strcmp_s("Enable",strlen("Enable"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "Enable") == 0)
     {
         *pBool = g_pMeshAgent->OvsEnable;
         return TRUE;
     }
-    else
-     MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
+    MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
     return FALSE;
 }
 
@@ -353,41 +347,34 @@ MeshAgent_GetParamStringValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
-    errno_t rc = -1;
-    int ind = -1;
-    /* check the parameter name and return the corresponding value */
-        rc = strcmp_s("URL",strlen("URL"),ParamName,&ind);
-        ERR_CHK(rc);
-        if( (ind == 0) && (rc == EOK))
-	{
-            rc = strcpy_s(pValue, *pUlSize, g_pMeshAgent->meshUrl);
-            if(rc != EOK)
-	    {
-	        ERR_CHK(rc);
-		return -1;
-	    }
-	    return 0;
-	}
-	
-    rc = strcmp_s("X_RDKCENTRAL-COM_Connected-Client",strlen("X_RDKCENTRAL-COM_Connected-Client"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "URL") == 0)
     {
-       // trap the value but don't return anything.
-       strcpy(pValue, "");
-       return 0;
-    }
-    rc = strcmp_s("Data",strlen("Data"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
-    {
-       MeshInfo(("Data Get Not supported\n"));
-       strcpy(pValue, "");
-       return 0;
+        errno_t rc = strcpy_s(pValue, *pUlSize, g_pMeshAgent->meshUrl);
+        if (rc != EOK)
+        {
+    	    ERR_CHK(rc);
+    	    return -1;
+        }
+        return 0;
     }
 
-	MeshError("Unsupported Namespace:%s\n", ParamName);
-	return -1;
+    if (strcmp(ParamName, "X_RDKCENTRAL-COM_Connected-Client") == 0)
+    {
+        strcpy(pValue, "");
+        return 0;
+    }
+
+    if (strcmp(ParamName, "Data") == 0)
+    {
+        MeshInfo(("Data Get Not supported\n"));
+        strcpy(pValue, "");
+        return 0;
+    }
+
+    MeshError("Unsupported Namespace:%s\n", ParamName);
+
+    return -1;
 }
 
 /**********************************************************************  
@@ -429,25 +416,21 @@ MeshAgent_GetParamUlongValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
-    errno_t rc = -1;
-    int ind = -1;
-    rc = strcmp_s("Status",strlen("Status"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "Status") == 0)
     {
         *puLong = g_pMeshAgent->meshStatus;
         return TRUE;
     }
 
-    rc = strcmp_s("State",strlen("State"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+    if (strcmp(ParamName, "State") == 0)
     {
         *puLong = g_pMeshAgent->meshState;
         return TRUE;
     }
 
     MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
     return FALSE;
 }
 
@@ -525,10 +508,8 @@ MeshAgent_SetParamBoolValue
         ERR_CHK(rc);
         return FALSE;
     }
-	
-    rc = strcmp_s("Enable",strlen("Enable"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "Enable") == 0)
     {
 	 if( TRUE == bValue )
          {
@@ -568,23 +549,23 @@ MeshAgent_SetParamBoolValue
         Mesh_SetEnabled(bValue, false, true);
         return TRUE;
     }
-    rc = strcmp_s("PodEthernetBackhaulEnable",strlen("PodEthernetBackhaulEnable"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "PodEthernetBackhaulEnable") == 0)
     {
         MeshInfo("Pod ethernet bhaul mode set\n");
         Mesh_SetMeshEthBhaul(bValue,false,true);
         return TRUE; 
     }    
-    rc = strcmp_s("Opensync",strlen("Opensync"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "Opensync") == 0)
     {
         MeshInfo("Opensync set\n");
         Opensync_Set(bValue,false,true);
 	return TRUE;
     }
+
     MeshWarning(("Unsupported parameter '%s'\n"), ParamName);
+
     return FALSE;
 }
 
@@ -628,22 +609,22 @@ GreAcc_SetParamBoolValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
-    errno_t rc = -1;
-    int ind = -1;
 
     if (isXB3Platform) {
-        rc = strcmp_s("Enable",strlen("Enable"), ParamName,&ind);
-        ERR_CHK(rc);
-        if( (ind == 0) && (rc == EOK))
+
+        if (strcmp(ParamName, "Enable") == 0)
         {
             MeshInfo("Gre Acc mode set\n");
             return Mesh_SetGreAcc(bValue,false, true);
         }
-        else
-            MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
+        MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
         return FALSE;
     }
+
     MeshWarning("GRE Acc Unsupported '%s'\n", ParamName);
+
     return FALSE;
 }
 
@@ -687,18 +668,15 @@ OVS_SetParamBoolValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
-    errno_t rc = -1;
-    int ind = -1;
-    
-    rc = strcmp_s("Enable",strlen("Enable"), ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "Enable") == 0)
     {
-     MeshInfo("OVS mode set with commit\n");
-     return Mesh_SetOVS(bValue,false,true);
+        MeshInfo("OVS mode set with commit\n");
+        return Mesh_SetOVS(bValue,false,true);
     }
-    else
-     MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
+    MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
     return FALSE;
 }
 
@@ -743,14 +721,9 @@ MeshAgent_SetParamUlongValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
-    errno_t rc = -1;
-    int ind = -1;
-    /* check the parameter name and return the corresponding value */
-    rc = strcmp_s("State", strlen("State"), ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))    
+
+    if (strcmp(ParamName, "State") == 0)
     {
-        // Make sure the value is valid
         if ((long)puLong >= MESH_STATE_FULL && puLong < MESH_STATE_TOTAL) {
             Mesh_SetMeshState(puLong, false, true);
             return TRUE;
@@ -758,6 +731,7 @@ MeshAgent_SetParamUlongValue
     }
 
     MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
     return FALSE;
 }
 
@@ -802,21 +776,14 @@ MeshAgent_SetParamStringValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
-    /* check the parameter name and return the corresponding value */
-    errno_t rc = -1;
-    int ind = -1;
 
-    rc = strcmp_s("URL",strlen("URL"), ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK)) 
+    if (strcmp(ParamName, "URL") == 0)
     {
         Mesh_SetUrl(pString, false);
         return TRUE;
     }
 
-    rc = strcmp_s("X_RDKCENTRAL-COM_Connected-Client", strlen("X_RDKCENTRAL-COM_Connected-Client"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK)) 
+    if (strcmp(ParamName, "X_RDKCENTRAL-COM_Connected-Client") == 0)
     {
 #ifdef USE_NOTIFY_COMPONENT
         char pIface[12] = {0}; // can be "Ethernet", "WiFi", "MoCA", "Other"
@@ -826,6 +793,7 @@ MeshAgent_SetParamStringValue
         char *param;
         char delim[2] = ",";
         int count = 0;
+        errno_t rc = -1;
 
         param = strtok(pString, delim);
 
@@ -880,9 +848,8 @@ MeshAgent_SetParamStringValue
 #endif
         return TRUE;
     }
-    rc = strcmp_s("Data", strlen("Data"),ParamName,&ind);
-    ERR_CHK(rc);
-    if( (ind == 0) && (rc == EOK))
+
+    if (strcmp(ParamName, "Data") == 0)
     {
         char * decodeMsg =NULL;
         int decodeMsgSize =0;
@@ -991,11 +958,12 @@ MeshAgent_SetParamStringValue
             MeshInfo("Corrupted Mesh value\n");
             return FALSE;
         }
-        return TRUE;
 
+        return TRUE;
     }
 
     MeshError("Unsupported Namespace:%s\n", ParamName);
+
     return FALSE;
 }
 
