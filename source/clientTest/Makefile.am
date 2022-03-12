@@ -17,7 +17,7 @@
 # limitations under the License.
 ##########################################################################
 # MeshAgent Process
-AM_CFLAGS = -D_ANSC_LINUX -D_ANSC_USER -D_ANSC_LITTLE_ENDIAN_
+AM_CFLAGS =
 
 ACLOCAL_AMFLAGS = -I m4
 
