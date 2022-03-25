@@ -38,8 +38,8 @@
 #include <fcntl.h>
 
 #include "cosa_mesh_parodus.h"
-#include <libparodus.h>
-#include "cJSON.h"
+#include <libparodus/libparodus.h>
+#include <cjson/cJSON.h>
 #include <math.h>
 #include "ansc_platform.h"
 #include "meshsync_msgs.h"

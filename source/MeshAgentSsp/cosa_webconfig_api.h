@@ -60,9 +60,6 @@ typedef struct {
     bool ethernetbackhaul_enable;
 } t_cache;
 
-t_cache mb_cache; 
-t_cache mb_cache_bkup; 
-
 uint32_t getBlobVersion(char* subdoc);
 int setBlobVersion(char* subdoc,uint32_t version);
 void webConfigFrameworkInit() ;
