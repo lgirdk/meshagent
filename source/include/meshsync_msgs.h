@@ -47,6 +47,11 @@
 #define LNF_BR               "br106"
 #define LNF_BR_XF3           "brlan6"
 
+#ifdef WAN_FAILOVER_SUPPORTED
+#define MESH_EXTENDER_VLAN   200
+#endif
+#define MAX_IFNAME_LEN       64
+
 #if defined(ENABLE_MESH_SOCKETS)
 /**************************************************************************/
 /*      Unix Domain Socket Name                                           */
@@ -98,7 +103,12 @@ typedef enum {
     MESH_REDUCED_RETRY,
     MESH_WIFI_SSID_CHANGED,
     MESH_WIFI_RADIO_OPERATING_STD,
+#if defined(RDK_EXTENDER) || defined(ONEWIFI)
     MESH_WIFI_EXTENDER_MODE,
+#endif
+#ifdef WAN_FAILOVER_SUPPORTED
+    MESH_BACKUP_NETWORK,
+#endif
     MESH_SYNC_MSG_TOTAL
 } eMeshSyncType;
 
@@ -146,6 +156,16 @@ typedef enum {
     MESH_WIFI_STATUS_FULL,
     MESH_WIFI_STATUS_TOTAL
 } eMeshWifiStatusType;
+
+#ifdef WAN_FAILOVER_SUPPORTED
+/**
+ * Mesh Device Mode 
+ */
+typedef enum {
+    MESH_EXTENDER_DEVICE_MODE = 0,
+    MESH_GATEWAY_DEVICE_MODE
+} eMeshDeviceMode;
+#endif
 
 /**
  * Mesh Connected Client Interfaces
@@ -302,6 +322,16 @@ typedef struct _MeshWifiStatus {
     eMeshWifiStatusType status; // Status of mesh network
 } MeshWifiStatus;
 
+#ifdef WAN_FAILOVER_SUPPORTED
+/**
+ * Mesh Network Type message
+ */
+typedef struct _MeshNetworkType {
+    eMeshDeviceMode type; // Status of mesh network
+    char ifname [MAX_IFNAME_LEN];
+} MeshNetworkType;
+#endif
+
 /**
  * Mesh State message
  */
@@ -417,6 +447,9 @@ typedef struct _MeshSync {
         MeshTunnelSet			tunnelSet; 
         MeshTunnelSetVlan		tunnelSetVlan;
         MeshReducedRetry                retryFlag;
+#ifdef WAN_FAILOVER_SUPPORTED
+        MeshNetworkType                 networkType;
+#endif
     } data;
 } MeshSync;
 

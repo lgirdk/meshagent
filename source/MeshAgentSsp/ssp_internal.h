@@ -51,6 +51,25 @@
 #define  MESSAGE_BUS_CONFIG_FILE                            "msg_daemon.cfg"
 #define  CCSP_MESHAGENT_START_CFG_FILE						"MeshAgent.cfg"
 
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI)
+#define EVENT_MESH_WAN_LINK              "Device.X_RDK_MeshAgent.MeshWANLink.Status"
+#define EVENT_MESH_WAN_IFNAME            "Device.X_RDK_MeshAgent.MeshWANLink.Interface.Name"
+#define MESH_WAN_INTERFACE               "dmsb.Mesh.WAN.Interface.Name"
+#define NUM_OF_RBUS_PARAMS                2
+#endif
+
+#define WIFI_STA_INTERFACE_NAME          "Device.WiFi.STA.%d.InterfaceName"
+
+/*From wifi_hal_generic.h.
+ * connection status of STA
+ * */
+typedef enum {
+   wifi_connection_status_disabled,
+   wifi_connection_status_disconnected,
+   wifi_connection_status_connected,
+   wifi_connection_status_ap_not_found
+} wifi_connection_status_t;
+
 /**
  * @brief Defines component Structure
  */
