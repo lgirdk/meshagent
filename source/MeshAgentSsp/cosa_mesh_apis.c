@@ -1566,42 +1566,6 @@ bool Mesh_GetEnabled(const char *name)
     return enabled;
 }
 
-static void applyWifiRadioSettings(int radioId)
-{
-    CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
-    parameterValStruct_t param_val[1];
-    char parameterName[256] = { 0 };
-    char  component[256]    = "eRT.com.cisco.spvtg.ccsp.wifi";
-    char  bus[256]          = "/com/cisco/spvtg/ccsp/wifi";
-    char *faultParam        = NULL;
-    int   ret               = 0;
-
-    sprintf(parameterName, "Device.WiFi.Radio.%d.X_CISCO_COM_ApplySetting", radioId + 1);
-
-    param_val[0].parameterName  = parameterName;
-    param_val[0].parameterValue = "true";
-    param_val[0].type           = ccsp_boolean;
-
-    MeshInfo("%s: Set [%s %s] \n", __func__, param_val[0].parameterName, param_val[0].parameterValue);
-
-    ret = CcspBaseIf_setParameterValues(
-            bus_handle,
-            component,
-            bus,
-            0,
-            0,
-            param_val,
-            1,
-            TRUE,
-            &faultParam
-            );
-
-    if ((ret != CCSP_SUCCESS) && (faultParam != NULL)) {
-        MeshError("%s: Failed to set [%s]\n", __func__, param_val[0].parameterName);
-        bus_info->freefunc(faultParam);
-    }
-}
-
 void changeChBandwidth(int radioId, int channelBw) {
   CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
   parameterValStruct_t   param_val[1];
@@ -1638,7 +1602,6 @@ void changeChBandwidth(int radioId, int channelBw) {
         bus_info->freefunc( faultParam );
     }
 
-    applyWifiRadioSettings(radioId);
 }
 
 BOOL set_wifi_boolean_enable(char *parameterName, char *parameterValue) {
