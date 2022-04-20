@@ -36,6 +36,8 @@
 #define MeshWarning(...)                 _MESHAGENT_LOG(MESHAGENT_LOG_WARNING, __VA_ARGS__)
 #define MeshDebug(...)                   _MESHAGENT_LOG(MESHAGENT_LOG_DEBUG, __VA_ARGS__)
 
+#define PARTNER_REDIRECTORURL_PARAMNAME  "Device.DeviceInfo.X_RDKCENTRAL-COM_Syndication.MeshRedirectorURL"
+
 typedef enum {
     POD_XHS_PORT=0,    //Send Event to meshAgent, once Pod is connected on XHS port
     POD_ETH_PORT,      //Send Event to meshAgent, once Pod is connected on non supported port

@@ -1947,6 +1947,44 @@ BOOL is_bridge_mode_enabled()
 
 }
 
+bool Mesh_getPartnerBasedURL(char *url)
+{
+    ANSC_STATUS ret = ANSC_STATUS_FAILURE;
+    parameterValStruct_t    **valStructs = NULL;
+    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.pam";
+    char dstPath[64]="/com/cisco/spvtg/ccsp/pam";
+    char *paramNames[]={PARTNER_REDIRECTORURL_PARAMNAME};
+    int  valNum = 0;
+    MeshInfo("Fetching the Redirector URL based on partnerID\n");
+
+    ret = CcspBaseIf_getParameterValues(
+            bus_handle,
+            dstComponent,
+            dstPath,
+            paramNames,
+            1,
+            &valNum,
+            &valStructs);
+
+    if(CCSP_Message_Bus_OK != ret)
+    {
+         CcspTraceError(("%s CcspBaseIf_getParameterValues %s error %lu\n", __FUNCTION__,paramNames[0],ret));
+         free_parameterValStruct_t(bus_handle, valNum, valStructs);
+         return false;
+    }
+    if(strlen(valStructs[0]->parameterValue) > 0)
+    {
+        strcpy(url,valStructs[0]->parameterValue);
+        MeshInfo("%s Returned URL for the partner = %s\n",__FUNCTION__, url);
+        return true;
+    }
+    else
+    {
+        MeshError("%s Empty URL, go with defaults\n", __FUNCTION__); 
+        return false;
+    }
+}
+
 void Mesh_setCacheStatusSyscfg(bool enable)
 {
     int i = 0;
@@ -2656,12 +2694,13 @@ static void Mesh_Recovery()
  */
 static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
 {
-    unsigned char out_val[128];
+    unsigned char out_val[128] = {'\0'};
     errno_t rc = -1, rc1 = -1;
     int     ind = -1, ind1 = -1;
     int i = 0;
     FILE *cmd=NULL;
     char mesh_enable[16];
+    bool isPartnerURL = false;
 
     PCOSA_DATAMODEL_MESHAGENT pMyObject = (PCOSA_DATAMODEL_MESHAGENT) hThisObject;
 
@@ -2671,11 +2710,7 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
     is_xf3_xb3_platform();
     // set URL
     out_val[0]='\0';
-    if(Mesh_SysCfgGetStr(meshSyncMsgArr[MESH_URL_CHANGE].sysStr, out_val, sizeof(out_val)) != 0)
-    {
-        MeshInfo("Mesh Url not set, using default %s\n", urlDefault);
-        Mesh_SetUrl((char *)urlDefault, true);
-    } else {
+    if( ( isPartnerURL = Mesh_getPartnerBasedURL(out_val)) || ( !Mesh_SysCfgGetStr(meshSyncMsgArr[MESH_URL_CHANGE].sysStr, out_val, sizeof(out_val)))) {
         rc = strcmp_s(out_val, strlen(out_val), urlOld, &ind);
         ERR_CHK(rc);
         if (!devFlag && ((ind == 0) && (rc == EOK)))
@@ -2702,8 +2737,15 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
             // Send sysevent notification
             /* Coverity Fix CID:65429 DC.STRING_BUFFER */
             snprintf(outBuf,sizeof(outBuf), "MESH|%s", out_val);
+            if( isPartnerURL)
+                Mesh_SysCfgSetStr(meshSyncMsgArr[MESH_URL_CHANGE].sysStr, out_val, false);
             Mesh_SyseventSetStr(meshSyncMsgArr[MESH_URL_CHANGE].sysStr, outBuf, 0, false);
         }
+    }
+    else
+    {
+        MeshInfo("Mesh Url not set, using default %s\n", urlDefault);
+        Mesh_SetUrl((char *)urlDefault, true);
     }
 
     // set Mesh State
