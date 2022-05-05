@@ -51,7 +51,7 @@
 #define  MESSAGE_BUS_CONFIG_FILE                            "msg_daemon.cfg"
 #define  CCSP_MESHAGENT_START_CFG_FILE						"MeshAgent.cfg"
 
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI)
+#if defined(WAN_FAILOVER_SUPPORTED)
 #define EVENT_MESH_WAN_LINK              "Device.X_RDK_MeshAgent.MeshWANLink.Status"
 #define EVENT_MESH_WAN_IFNAME            "Device.X_RDK_MeshAgent.MeshWANLink.Interface.Name"
 #define MESH_WAN_INTERFACE               "dmsb.Mesh.WAN.Interface.Name"

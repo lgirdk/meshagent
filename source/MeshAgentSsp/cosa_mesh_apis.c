@@ -139,11 +139,10 @@ pthread_mutex_t mesh_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define _DEBUG 1
 #define THREAD_NAME_LEN 16 //length is restricted to 16 characters, including the terminating null byte
 
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI)
+#if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED)
 extern char g_Subsystem[32];
 rbusHandle_t handle;
 #endif
-
 #ifdef WAN_FAILOVER_SUPPORTED
 static bool meshWANStatus = false;
 static char *meshWANIfname = NULL;
@@ -158,6 +157,19 @@ rbusDataElement_t meshRbusDataElements[NUM_OF_RBUS_PARAMS] = {
         {EVENT_MESH_WAN_LINK, RBUS_ELEMENT_TYPE_EVENT, {rbusGetBoolHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
         {EVENT_MESH_WAN_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, NULL, NULL}}
 };
+#endif
+#if defined(ONEWIFI)
+typedef struct _MeshStaStatus_node
+{
+   char sta_ifname[MAX_IFNAME_LEN];
+   bool state;
+   struct _MeshStaStatus_node  *next;
+}MeshStaStatus_node;
+
+MeshStaStatus_node *staHead = NULL;
+MeshStaStatus_node *staCurrent = NULL;
+MeshStaStatus_node * searchStaActive();
+static unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
 #endif
 
 //Prash
@@ -233,6 +245,12 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     ,
     {MESH_BACKUP_NETWORK,                   "MESH_BACKUP_NETWORK",                  "mesh_wan_linkstatus"}
 #endif
+#ifdef ONEWIFI
+    ,
+    {MESH_GET_STAINFO,                      "MESH_GET_STAINFO",                     "mesh_get_stainfo"}
+    ,
+    {MESH_BRHOME_IP,                        "MESH_BRHOME_IP",                        "remote_ssh_server_ip"}
+#endif
     };
 typedef struct
 {
@@ -261,7 +279,8 @@ static bool Mesh_Register_sysevent(ANSC_HANDLE hThisObject);
 static void *Mesh_sysevent_handler(void *data);
 static void Mesh_sendReducedRetry(bool value);
 #ifdef ONEWIFI
-void Mesh_sendStaInterface(unsigned char *ifname);
+void Mesh_sendStaInterface(char * mesh_sta, bool status);
+int get_sta_active_interface_name();
 #endif
 static int Mesh_Init(ANSC_HANDLE hThisObject);
 static void Mesh_InitClientList();
@@ -613,7 +632,7 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_SSID_CHANGED].sysStr, cmd, 0, false);
     }
     break;
-#ifdef ONEWIFI
+#if defined(ONEWIFI)
     case MESH_WIFI_EXTENDER_MODE:
     {
         char cmd[256]={0};
@@ -777,6 +796,28 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
         else
             MeshError(("Not subcribtion for MeshWANLink status value.\n"));
     }
+    break;
+#endif
+#ifdef ONEWIFI
+    case MESH_GET_STAINFO:
+    {
+        MeshStaStatus_node *sta = NULL;
+        MeshInfo(("Received MESH_GET_STAINFO sync message.\n"));
+        sta =  searchStaActive();
+        if (sta)
+        {
+            Mesh_sendStaInterface(sta->sta_ifname,true);
+        }
+        else
+        {
+            Mesh_sendStaInterface(sta->sta_ifname,false);
+            MeshInfo(("Sta is not connected.\n"));
+        }
+    }
+    break;
+    case MESH_BRHOME_IP:
+        MeshInfo("Received event MESH_BRHOME_IP %s", rxMsg.data.brhomeIP.ip);
+        Mesh_SyseventSetStr(meshSyncMsgArr[MESH_BRHOME_IP].sysStr, rxMsg.data.brhomeIP.ip, 0, false);
     break;
 #endif
     // the rest of these messages will not come from the Mesh vendor
@@ -2539,8 +2580,46 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
     return RBUS_ERROR_SUCCESS;
 }
 #endif
-
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI)
+#if defined(ONEWIFI)
+MeshStaStatus_node *  addSta(char *ifname, bool state)
+{
+    MeshStaStatus_node *new_sta = (MeshStaStatus_node *) malloc(sizeof(MeshStaStatus_node));
+
+    new_sta->state = state;
+    strncpy(new_sta->sta_ifname,ifname,sizeof(new_sta->sta_ifname));
+    MeshInfo("addSta: sta_ifname:%s state : %d\n",new_sta->sta_ifname,new_sta->state);
+    new_sta->next = staHead;
+    staHead  = new_sta;
+
+    return new_sta;
+}
+
+MeshStaStatus_node * searchStaByIfname(char *ifname)
+{
+    MeshStaStatus_node* current = staHead;
+    while (current != NULL)
+    {
+        if (strcmp(current->sta_ifname, ifname) == 0 )
+            return current;
+        current = current->next;
+    }
+    return NULL;
+}
+
+MeshStaStatus_node * searchStaActive()
+{
+    MeshStaStatus_node* current = staHead;
+    while (current != NULL)
+    {
+        if (current->state == true )
+            return current;
+        current = current->next;
+    }
+    return NULL;
+}
+#endif
+
 /**
  * @brief Mesh meshRbusInit
  *
@@ -2575,8 +2654,8 @@ rbusError_t meshRbusInit()
 }
 #endif
 
-#if defined(ONEWIFI)
-int getRbusStaInterfaceName(const char *name, unsigned char *ifname)
+#ifdef ONEWIFI
+int getRbusStaInterfaceName(const char *name)
 {
     rbusValue_t value;
     int rc = RBUS_ERROR_SUCCESS;
@@ -2589,8 +2668,8 @@ int getRbusStaInterfaceName(const char *name, unsigned char *ifname)
     }
 
     newValue = rbusValue_GetString(value, NULL);
-    snprintf(ifname, MAX_IFNAME_LEN, "%s", newValue);
-    MeshInfo(":%s:%d Sta interface name = [%s]\n", __func__, __LINE__, ifname);
+    snprintf(mesh_sta_ifname, MAX_IFNAME_LEN, "%s", newValue);
+    MeshInfo(":%s:%d Sta interface name = [%s]\n", __func__, __LINE__, mesh_sta_ifname);
 
     return 0;
 }
@@ -2603,10 +2682,10 @@ void staConnStatusHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
     bool conn_status;
     unsigned int index = 0;
     char name[64] = {0};
-    unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
     int len = 0;
     wifi_connection_status_t connect_status;
     const unsigned char *temp_buff;
+    MeshStaStatus_node * sta;
     rbusValue_t value = rbusObject_GetValue(event->data, NULL );
     if(!value)
     {
@@ -2625,15 +2704,41 @@ void staConnStatusHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 
     memcpy(&connect_status, temp_buff, len);
     conn_status = (connect_status == wifi_connection_status_connected) ? true:false;
+    sprintf(name, WIFI_STA_INTERFACE_NAME,index);
+    getRbusStaInterfaceName(name);
     if (conn_status == true) {
         MeshInfo("%s:%d: Station successfully connected with external AP radio:%d\r\n",
                     __func__, __LINE__, index - 1);
-        sprintf(name, WIFI_STA_INTERFACE_NAME,index);
-        getRbusStaInterfaceName(name, mesh_sta_ifname);
-	Mesh_sendStaInterface(mesh_sta_ifname);
-    } else {
-        MeshError("%s:%d: Station disconnected with external AP:%d radio:%d\r\n",
+        sta =  searchStaByIfname(mesh_sta_ifname);
+        if (!sta)
+        {
+            MeshInfo("%s:%d Sta not present so adding\n",__FUNCTION__, __LINE__);
+            sta = addSta(mesh_sta_ifname,true);
+            Mesh_sendStaInterface(sta->sta_ifname,true);
+        }
+        else
+        {
+            if(!sta->state)
+	    {
+                MeshInfo("%s:%d Sta already exist so change the state \n",__FUNCTION__, __LINE__);
+                Mesh_sendStaInterface(sta->sta_ifname,true);
+                sta->state = true;
+            }
+        }
+    } 
+    else {
+        MeshError("%s:%d: Disconnected with external AP:%d radio:%d\r\n",
                 __func__, __LINE__, conn_status, index - 1);
+        sta =  searchStaByIfname(mesh_sta_ifname);
+        if(sta)
+        {
+            if (sta->state)
+            {
+                Mesh_sendStaInterface(sta->sta_ifname,false);
+                sta->state = false;
+            }
+            memset(&mesh_sta_ifname, 0, MAX_IFNAME_LEN);
+        }
     }
 
     return;
@@ -2651,6 +2756,89 @@ bool subscribeStaConnectionStatus()
         ret = false;
     }
    return ret;
+}
+
+int get_sta_active_interface_name()
+{
+    int rc = RBUS_ERROR_SUCCESS;
+    int numOfInputParams = 0, numOfOutVals = 0;
+    const char *pInputParam[5] = {0, 0};
+    char first_arg[64] = "Device.WiFi.STA.";
+    rbusProperty_t outputVals = NULL;
+    int i = 0;
+    unsigned int index = 0;
+    char name[64] = {0};
+    int len = 0;
+    bool conn_status;
+    wifi_connection_status_t connect_status;
+    const unsigned char *temp_buff;
+    char *pStrVal = NULL;
+    MeshStaStatus_node * sta= NULL;
+
+    pInputParam[numOfInputParams] = first_arg;
+    numOfInputParams = 1;
+
+    if (numOfInputParams == 0) {
+        MeshInfo("%s:%d: numOfInputParams = %d\r\n", __func__, __LINE__, numOfInputParams);
+        return -1;
+    }
+
+    rc = rbus_getExt(handle, numOfInputParams, pInputParam, &numOfOutVals, &outputVals);
+    if(RBUS_ERROR_SUCCESS == rc) {
+        rbusProperty_t next = outputVals;
+        for (i = 0; i < numOfOutVals; i++) {
+            rbusValue_t val = rbusProperty_GetValue(next);
+            rbusValueType_t type = rbusValue_GetType(val);
+            MeshInfo ("Parameter %2d:\n\r", i+1);
+            if(type == RBUS_BYTES) {
+                temp_buff = rbusValue_GetBytes(val, &len);
+                sscanf(rbusProperty_GetName(next), "Device.WiFi.STA.%d.Connection.Status", &index);
+                if (temp_buff == NULL) {
+                    MeshError("%s:%d Rbus get string failure len=%d\n", __FUNCTION__, __LINE__, len);
+                    return -1;
+                }
+                memcpy(&connect_status, temp_buff, len);
+                conn_status = (connect_status == wifi_connection_status_connected) ? true:false;
+                if (conn_status == true) {
+                    MeshInfo("%s:%d: Station successfully connected with external AP radio:%d\r\n",
+                              __func__, __LINE__, index - 1);
+                    sprintf(name, WIFI_STA_INTERFACE_NAME,index);
+                    getRbusStaInterfaceName(name);
+                    sta =  searchStaByIfname(mesh_sta_ifname);
+                    if (!sta){
+                        sta = addSta(mesh_sta_ifname,true);
+                        MeshInfo("Sta is connected to %s  when mesh starts\n",sta->sta_ifname );
+                        Mesh_sendStaInterface(sta->sta_ifname,true);
+                    }
+                    else{
+                        MeshInfo("%s:%d: Sta interface is already there in list %s\r\n",__func__, __LINE__,sta->sta_ifname);
+                        sta->state = true;
+                    }
+                } else {
+                    MeshInfo("%s:%d: Station is not connected\r\n",__func__, __LINE__);
+                }
+            }
+            else if(type == RBUS_STRING) {
+                pStrVal = rbusValue_ToString(val,NULL,0);
+                MeshInfo("              Name  : %s\n\r", rbusProperty_GetName(next));
+                MeshInfo("              Type  : %d\n\r", type);
+                MeshInfo("              Value : %s\n\r", pStrVal);
+
+                if(pStrVal) {
+                    free(pStrVal);
+                }
+            }
+
+            next = rbusProperty_GetNext(next);
+        }
+        /* Free the memory */
+        rbusProperty_Release(outputVals);
+    } else {
+        MeshInfo ("Failed to get the data. Error : %d\n\r",rc);
+        return -1;
+    }
+
+    return 0;
 }
 #endif
 
@@ -3614,22 +3802,23 @@ static void Mesh_sendReducedRetry(bool value)
  *
  * This function will notify plume agent about sta interface
  */
-void Mesh_sendStaInterface(unsigned char *mesh_sta_name)
+void Mesh_sendStaInterface(char * mesh_sta, bool status)
 {
     MeshSync mMsg = {0};
     int rc = 0;
 
     // Set sync message type
     mMsg.msgType = MESH_WIFI_EXTENDER_MODE;
+    mMsg.data.onewifiXLEExtenderMode.status  = status ?  1 : 0; 
     rc = strcpy_s(mMsg.data.onewifiXLEExtenderMode.InterfaceName,
-         sizeof(mMsg.data.onewifiXLEExtenderMode.InterfaceName), mesh_sta_name);
+         sizeof(mMsg.data.onewifiXLEExtenderMode.InterfaceName), mesh_sta);
     if(rc != EOK)
     {
         ERR_CHK(rc);
         MeshError("Error in copying Interface name\n");
     }
-    MeshInfo("Sysevent set  MESH_WIFI_EXTENDER_MODE cmd:%s\n",mesh_sta_name);
-    Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_EXTENDER_MODE].sysStr, mesh_sta_name, 0, false);
+    MeshInfo("Sysevent set  MESH_WIFI_EXTENDER_MODE cmd:%s\n",mesh_sta);
+    Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_EXTENDER_MODE].sysStr, mesh_sta, 0, false);
     MeshInfo("Send MESH_WIFI_EXTENDER_MODE msgQsend Interface:%s\n",mMsg.data.onewifiXLEExtenderMode.InterfaceName);
     msgQSend(&mMsg);
 }
@@ -5442,6 +5631,7 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     meshRbusInit();
 #endif
 #ifdef ONEWIFI
+    get_sta_active_interface_name();
     subscribeStaConnectionStatus();
 #endif
     // MeshInfo("Exiting from %s\n",__FUNCTION__);

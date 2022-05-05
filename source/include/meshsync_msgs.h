@@ -103,11 +103,15 @@ typedef enum {
     MESH_REDUCED_RETRY,
     MESH_WIFI_SSID_CHANGED,
     MESH_WIFI_RADIO_OPERATING_STD,
-#if defined(RDK_EXTENDER) || defined(ONEWIFI)
+#if defined(ONEWIFI)
     MESH_WIFI_EXTENDER_MODE,
 #endif
 #ifdef WAN_FAILOVER_SUPPORTED
     MESH_BACKUP_NETWORK,
+#endif
+#ifdef ONEWIFI
+    MESH_GET_STAINFO,
+    MESH_BRHOME_IP,
 #endif
     MESH_SYNC_MSG_TOTAL
 } eMeshSyncType;
@@ -202,6 +206,7 @@ typedef struct _MeshWifiSSIDChanged {
 
 typedef struct _MeshWifiXLEExtenderMode {
     char    InterfaceName[MAX_SSID_LEN];
+    uint8_t status;
 } MeshWifiXLEExtenderMode;
 
 /**
@@ -332,6 +337,12 @@ typedef struct _MeshNetworkType {
 } MeshNetworkType;
 #endif
 
+#ifdef ONEWIFI
+typedef struct _MeshGetSTAInfo {
+    uint8_t status;
+} MeshGetSTAInfo;
+#endif
+
 /**
  * Mesh State message
  */
@@ -412,6 +423,14 @@ typedef struct _MeshWifiRadioChannelBw {
     int index;
     int bw;
 } MeshWifiRadioChannelBw;
+#ifdef ONEWIFI
+/**
+ * br-home IP assigned notification
+ */
+typedef struct _MeshBrhomeIp {
+    char ip[16];
+} MeshBrhomeIp;
+#endif
 
 /**
  * Mesh Sync message
@@ -449,6 +468,10 @@ typedef struct _MeshSync {
         MeshReducedRetry                retryFlag;
 #ifdef WAN_FAILOVER_SUPPORTED
         MeshNetworkType                 networkType;
+#endif
+#ifdef ONEWIFI
+        MeshGetSTAInfo                  staInfo;
+        MeshBrhomeIp                    brhomeIP;
 #endif
     } data;
 } MeshSync;
