@@ -3938,10 +3938,8 @@ static void Mesh_sendDhcpLeaseSync(void)
     //plume while dnsmasq.lease sync is happening
     clientSocketsMask |= (1 << MAX_CONNECTED_CLIENTS);
     //copy the dnsmasq.leases file from ARM to Atom and send out SYNC message to use the file
-    if(isXB3Platform) {
-        MeshInfo("Copying dnsmasq.leases file from ARM to Atom for the first time\n");
-        v_secure_system("/usr/ccsp/wifi/synclease.sh");
-    }
+    MeshInfo("Copying dnsmasq.leases file from ARM to Atom for the first time\n");
+    v_secure_system("/usr/ccsp/wifi/synclease.sh");
 #if 1
 
     // Notify plume
