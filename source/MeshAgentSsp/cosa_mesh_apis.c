@@ -4998,14 +4998,19 @@ CosaDmlMeshAgentInit
         ANSC_HANDLE                 hThisObject
     )
 {
-    MeshInfo("Initialize MeshAgent \n");
+    int res;
+    MeshInfo("Initialize MeshAgent\n");
 
-    if (Mesh_Init(hThisObject) != 0)
+    // Ensure meshwifi service not started before init done
+    pthread_mutex_lock(&mesh_handler_mutex);
+    res = Mesh_Init(hThisObject);
+    pthread_mutex_unlock(&mesh_handler_mutex);
+    if (res != 0)
     {
         MeshError("Mesh Agent Initialization failed\n");
         return ANSC_STATUS_FAILURE;
     }
-
+    MeshInfo("MeshAgent initialized\n");
     return ANSC_STATUS_SUCCESS;
 }
 
