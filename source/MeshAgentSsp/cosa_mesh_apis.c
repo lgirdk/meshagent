@@ -67,6 +67,8 @@
 // TELEMETRY 2.0 //RDKB-26019
 #include <telemetry_busmessage_sender.h>
 
+extern void initparodusTask();
+
 /**************************************************************************/
 /*      LOCAL VARIABLES:                                                  */
 /**************************************************************************/
@@ -257,16 +259,16 @@ static int  msgQSend(MeshSync *data);
 static void Mesh_SetDefaults(ANSC_HANDLE hThisObject);
 static bool Mesh_Register_sysevent(ANSC_HANDLE hThisObject);
 static void *Mesh_sysevent_handler(void *data);
-void Mesh_sendReducedRetry(bool value);
+static void Mesh_sendReducedRetry(bool value);
 #ifdef ONEWIFI
 void Mesh_sendStaInterface(unsigned char *ifname);
 #endif
-int Mesh_Init(ANSC_HANDLE hThisObject);
-void Mesh_InitClientList();
-void changeChBandwidth( int, int);
+static int Mesh_Init(ANSC_HANDLE hThisObject);
+static void Mesh_InitClientList();
+static void changeChBandwidth( int, int);
 static void Mesh_ModifyPodTunnel(MeshTunnelSet *conf);
 static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf);
-BOOL is_configure_wifi_enabled();
+static BOOL is_configure_wifi_enabled();
 #ifdef WAN_FAILOVER_SUPPORTED
 bool Mesh_ExtenderBridge(char *ifname);
 rbusError_t publishRBUSEvent(char* event_name , bool event_val);
@@ -277,7 +279,7 @@ static int eth_mac_count = 0;
 
 static ssize_t leaseServerRead(int fd, MeshNotify* notify, int timeout);
 
-int Get_MeshSyncType(char * name ,eMeshSyncType *type_ptr)
+static int Get_MeshSyncType(char * name ,eMeshSyncType *type_ptr)
 {
     errno_t rc       = -1;
     int     ind      = -1;
@@ -308,7 +310,7 @@ int Get_MeshSyncType(char * name ,eMeshSyncType *type_ptr)
  *
  * This function will take an interface string and convert it to an enum value
  */
-eMeshIfaceType Mesh_IfaceLookup(char * iface)
+static eMeshIfaceType Mesh_IfaceLookup(char *iface)
 {
     eMeshIfaceType ret = MESH_IFACE_OTHER;
     errno_t rc       = -1;
@@ -337,7 +339,7 @@ eMeshIfaceType Mesh_IfaceLookup(char * iface)
  *
  * This function will take an interface string and convert it to an enum value
  */
-eMeshWifiStatusType Mesh_WifiStatusLookup(char *status)
+static eMeshWifiStatusType Mesh_WifiStatusLookup(char *status)
 {
     eMeshWifiStatusType ret = MESH_WIFI_STATUS_OFF;
     errno_t rc       = -1;
@@ -362,7 +364,7 @@ eMeshWifiStatusType Mesh_WifiStatusLookup(char *status)
     return ret;
 }
 
-bool isValidIpAddress(char *ipAddress)
+static bool isValidIpAddress(char *ipAddress)
 {
     struct sockaddr_in sa = {0};
     char ip[16] = {0};
@@ -385,7 +387,7 @@ bool isValidIpAddress(char *ipAddress)
     return result != 0;
 }
 
-int Mesh_DnsmasqSock(void)
+static int Mesh_DnsmasqSock(void)
 {
  if(!dnsmasqFd)
  {
@@ -509,6 +511,7 @@ void Mesh_SendEthernetMac(char *mac)
 
   return;
 }
+
 static int Mesh_getEthPodIndex(char *cmac)
 {
  int i=0;
@@ -520,6 +523,7 @@ static int Mesh_getEthPodIndex(char *cmac)
  }
  return ret;
 }
+
 static void Mesh_SendPodAddresses()
 {
  int i=0;
@@ -542,7 +546,7 @@ static void Mesh_SendPodAddresses()
  *
  *  This function will take a sync message and process it
  */
-void Mesh_ProcessSyncMessage(MeshSync rxMsg)
+static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
 {
     // Parse out the messages and send the sysevents
     // Check to see if this is a valid message
@@ -786,7 +790,7 @@ void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     }
 }
 
-static void Mesh_logLinkChange()
+static void Mesh_logLinkChange(void)
 {
     int rc = -1;
 
@@ -805,7 +809,7 @@ static void Mesh_logLinkChange()
     }
 }
 
-int Mesh_CreateEthTunnel(int PodIdx, const char * bridge_ip, const char * pod_addr, const char * pod_dev, bool isOVSEnabled)
+static int Mesh_CreateEthTunnel(int PodIdx, const char * bridge_ip, const char * pod_addr, const char * pod_dev, bool isOVSEnabled)
 {
     int rc = -1;
 
@@ -1062,7 +1066,7 @@ static void* leaseServer(void *data)
     return NULL;
 }
 
-ssize_t leaseServerRead(int fd, MeshNotify* notify, int timeout)
+static ssize_t leaseServerRead(int fd, MeshNotify* notify, int timeout)
 {
     int ret = 0;
     ssize_t len = 0;
@@ -1636,7 +1640,8 @@ bool Mesh_GetEnabled(const char *name)
     return enabled;
 }
 
-void changeChBandwidth(int radioId, int channelBw) {
+static void changeChBandwidth(int radioId, int channelBw)
+{
   CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
   parameterValStruct_t   param_val[1];
   char parameterName[256] = {0};
@@ -1673,7 +1678,8 @@ void changeChBandwidth(int radioId, int channelBw) {
     }
 }
 
-BOOL set_wifi_boolean_enable(char *parameterName, char *parameterValue) {
+BOOL set_wifi_boolean_enable(char *parameterName, char *parameterValue)
+{
     CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
     parameterValStruct_t   param_val[1];
     char  component[256]  = "eRT.com.cisco.spvtg.ccsp.wifi";
@@ -1707,7 +1713,7 @@ BOOL set_wifi_boolean_enable(char *parameterName, char *parameterValue) {
     return TRUE;
 }
 
-BOOL is_configure_wifi_enabled()
+static BOOL is_configure_wifi_enabled(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
@@ -1750,7 +1756,7 @@ BOOL is_configure_wifi_enabled()
     }
 }
 
-BOOL is_band_steering_enabled()
+static BOOL is_band_steering_enabled(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
@@ -1792,7 +1798,8 @@ BOOL is_band_steering_enabled()
     }
 }
 
-BOOL is_reset_needed()
+#if 0
+static BOOL is_reset_needed(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
@@ -1839,10 +1846,11 @@ BOOL is_reset_needed()
     free_parameterValStruct_t(bus_handle, valNum, valStructs);
     return ret_b;
 }
+#endif
 
 //Enables/Disables Mesh APs, If enable, sets ath12 and ath13 and does apply wifi setting, when mesh
 //Disabled , it bring downs Vaps
-void set_mesh_APs(bool enable)
+static void set_mesh_APs(bool enable)
 {
  MeshInfo("%s Performing a mesh AP = %s\n",__FUNCTION__,(enable?"true":"false"));
  if(set_wifi_boolean_enable("Device.WiFi.SSID.13.Enable",(enable?"true":"false")))
@@ -1851,7 +1859,7 @@ void set_mesh_APs(bool enable)
   MeshInfo("Device.WiFi.SSID.14.Enable succesfully set to %s\n",(enable?"true":"false"));
 }
 
-BOOL is_SSID_enabled()
+static BOOL is_SSID_enabled(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
@@ -1910,7 +1918,7 @@ BOOL is_SSID_enabled()
     return ret_b;
 }
 
-void is_xf3_xb3_platform()
+static void is_xf3_xb3_platform(void)
 {
     FILE *cmd;
     char platform[32] = {'\0'};
@@ -1934,7 +1942,7 @@ void is_xf3_xb3_platform()
                     isPaceXF3, isXB3Platform, isSkyHUB4);
 }
 
-BOOL radio_check()
+static BOOL radio_check(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
@@ -2084,7 +2092,7 @@ BOOL is_bridge_mode_enabled()
 
 }
 
-bool Mesh_getPartnerBasedURL(char *url)
+static bool Mesh_getPartnerBasedURL(char *url)
 {
     ANSC_STATUS ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
@@ -2122,7 +2130,7 @@ bool Mesh_getPartnerBasedURL(char *url)
     }
 }
 
-void Mesh_setCacheStatusSyscfg(bool enable)
+static void Mesh_setCacheStatusSyscfg(bool enable)
 {
     int i = 0;
 
@@ -2137,7 +2145,7 @@ void Mesh_setCacheStatusSyscfg(bool enable)
     }
 }
 
-bool meshSetMeshRetrySyscfg(bool enable)
+static bool meshSetMeshRetrySyscfg(bool enable)
 {
     int i = 0;
     bool success = false;
@@ -2169,7 +2177,7 @@ bool meshSetMeshRetrySyscfg(bool enable)
     return success;
 }
 
-void meshSetEthbhaulSyscfg(bool enable)
+static void meshSetEthbhaulSyscfg(bool enable)
 {
     int i =0;
 
@@ -2189,7 +2197,7 @@ void meshSetEthbhaulSyscfg(bool enable)
     MeshInfo("eth bhaul enable set in the syscfg successfully\n");
 }
 
-bool meshSetGreAccSyscfg(bool enable)
+static bool meshSetGreAccSyscfg(bool enable)
 {
     int i = 0;
     bool success = false;
@@ -2220,7 +2228,8 @@ bool meshSetGreAccSyscfg(bool enable)
 
     return success;
 }
-bool meshSetOVSSyscfg(bool enable)
+
+static bool meshSetOVSSyscfg(bool enable)
 {
     int i = 0;
     bool success = false;
@@ -2252,7 +2261,7 @@ bool meshSetOVSSyscfg(bool enable)
     return success;
 }
 
-bool OpensyncSetSyscfg(bool enable)
+static bool OpensyncSetSyscfg(bool enable)
 {
     int i =0;
     bool success = false;
@@ -3084,7 +3093,8 @@ BOOL is_radio_enabled(char *dcs1, char *dcs2)
     return ret_b;
 }
 
-BOOL is_DCS_enabled()
+#if 0
+static BOOL is_DCS_enabled(void)
 {
     if(is_radio_enabled("Device.WiFi.Radio.1.X_RDKCENTRAL-COM_DCSEnable","Device.WiFi.Radio.2.X_RDKCENTRAL-COM_DCSEnable") 
           || is_radio_enabled("Device.WiFi.Radio.1.X_COMCAST-COM_DCSEnable","Device.WiFi.Radio.2.X_COMCAST-COM_DCSEnable")) 
@@ -3093,12 +3103,13 @@ BOOL is_DCS_enabled()
     }
     return FALSE;
 }
+#endif
 
 /**
  * Prash: This is a last option if all syscfg and retrial fails
  *
  */
-static void Mesh_Recovery()
+static void Mesh_Recovery(void)
 {
     if(!access(MESH_ENABLED, F_OK)) {
      MeshInfo("mesh flag is enabled in nvram, setting mesh enabled\n");
@@ -3586,7 +3597,7 @@ bool Mesh_UpdateConnectedDevice(char *mac, char *iface, char *host, char *status
  *
  * This function will notify plume agent about RFC changes
  */
-void Mesh_sendReducedRetry(bool value)
+static void Mesh_sendReducedRetry(bool value)
 {
     // send out notification to plume
     MeshSync mMsg = {0};
@@ -3902,7 +3913,7 @@ static void *Mesh_sysevent_handler(void *data)
         }
         else
         {
-            eMeshSyncType ret_val;
+            eMeshSyncType ret_val=0;
             if(Get_MeshSyncType(name,&ret_val))
             {
                 if (ret_val == MESH_WIFI_RESET)
@@ -5236,7 +5247,7 @@ static void *Mesh_sysevent_handler(void *data)
  * Initialize the client list table with the devices connected before mesh was started.
  */
 
-void Mesh_InitClientList()
+static void Mesh_InitClientList(void)
 {
     char val[256] = {0};
     errno_t rc = -1;
@@ -5309,7 +5320,7 @@ void Mesh_InitClientList()
  *
  *  @return 0
  */
-int Mesh_Init(ANSC_HANDLE hThisObject)
+static int Mesh_Init(ANSC_HANDLE hThisObject)
 {
     int status = 0;
     int thread_status = 0;
