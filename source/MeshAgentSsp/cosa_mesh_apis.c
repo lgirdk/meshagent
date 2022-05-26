@@ -1983,6 +1983,10 @@ static BOOL is_SSID_enabled(void)
 
 static void is_xf3_xb3_platform(void)
 {
+#if 0
+
+    /* These platforms are Comcast specific. There's no point checking for them in generic or non-Comcast builds. */
+
     FILE *cmd;
     char platform[32] = {'\0'};
 
@@ -2003,6 +2007,8 @@ static void is_xf3_xb3_platform(void)
     }
     MeshInfo("platform check XF3:%d, XB3:%d HUB4:%d\n",
                     isPaceXF3, isXB3Platform, isSkyHUB4);
+
+#endif
 }
 
 static BOOL radio_check(void)
