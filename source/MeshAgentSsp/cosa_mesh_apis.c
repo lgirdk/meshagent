@@ -2176,6 +2176,10 @@ static BOOL is_SSID_enabled(void)
 
 static void is_xf3_xb3_platform(void)
 {
+#if 0
+
+    /* These platforms are Comcast specific. There's no point checking for them in generic or non-Comcast builds. */
+
     FILE *cmd;
     char platform[32] = {'\0'};
 
@@ -2198,6 +2202,8 @@ static void is_xf3_xb3_platform(void)
     }
     MeshInfo("platform check XF3:%d, XB3:%d HUB4:%d CBR2:%d\n",
                     isPaceXF3, isXB3Platform, isSkyHUB4, isCBR2);
+
+#endif
 }
 
 static BOOL radio_check(void)
@@ -5207,10 +5213,8 @@ static void Mesh_sendDhcpLeaseSync(void)
     //plume while dnsmasq.lease sync is happening
     clientSocketsMask |= (1 << MAX_CONNECTED_CLIENTS);
     //copy the dnsmasq.leases file from ARM to Atom and send out SYNC message to use the file
-    if(isXB3Platform) {
-        MeshInfo("Copying dnsmasq.leases file from ARM to Atom for the first time\n");
-        v_secure_system("/usr/ccsp/wifi/synclease.sh");
-    }
+    MeshInfo("Copying dnsmasq.leases file from ARM to Atom for the first time\n");
+    v_secure_system("/usr/ccsp/wifi/synclease.sh");
 #if 1
 
     // Notify plume
