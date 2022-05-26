@@ -2155,6 +2155,7 @@ BOOL is_bridge_mode_enabled()
 
 }
 
+#ifdef USE_PARTNER_ID
 static bool Mesh_getPartnerBasedURL(char *url)
 {
     ANSC_STATUS ret = ANSC_STATUS_FAILURE;
@@ -2192,6 +2193,7 @@ static bool Mesh_getPartnerBasedURL(char *url)
         return false;
     }
 }
+#endif
 
 static void Mesh_setCacheStatusSyscfg(bool enable)
 {
@@ -3433,7 +3435,12 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
     is_xf3_xb3_platform();
     // set URL
     out_val[0]='\0';
+
+#ifdef USE_PARTNER_ID
     if( ( isPartnerURL = Mesh_getPartnerBasedURL(out_val)) || ( !Mesh_SysCfgGetStr(meshSyncMsgArr[MESH_URL_CHANGE].sysStr, out_val, sizeof(out_val)))) {
+#else
+    if( !Mesh_SysCfgGetStr(meshSyncMsgArr[MESH_URL_CHANGE].sysStr, out_val, sizeof(out_val)) ) {
+#endif
         rc = strcmp_s(out_val, strlen(out_val), urlOld, &ind);
         ERR_CHK(rc);
         if (!devFlag && ((ind == 0) && (rc == EOK)))
