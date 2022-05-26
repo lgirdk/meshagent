@@ -2159,10 +2159,10 @@ bool OpensyncSetSyscfg(bool enable)
     int i =0;
     bool success = false;
     MeshInfo("%s Setting Opensync enable in syscfg to %d\n", __FUNCTION__, enable);
-    if(Mesh_SysCfgSetStr("opensync_enable", (enable?"true":"false"), true) != 0) {
+    if(Mesh_SysCfgSetStr("opensync", (enable?"true":"false"), true) != 0) {
          MeshInfo("Failed to set the Opensync Enable in syscfg, retrying 5 times\n");
          for(i=0; i<5; i++) {
-         if(!Mesh_SysCfgSetStr("opensync_enable", (enable?"true":"false"), true)) {
+         if(!Mesh_SysCfgSetStr("opensync", (enable?"true":"false"), true)) {
            MeshInfo("opensync syscfg set passed in %d attempt\n", i+1);
 	   success = true;
            break;
@@ -2487,7 +2487,7 @@ static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf)
 }
 
 bool Opensync_Set(bool enable, bool init, bool commitSyscfg) {
-    if (init || Mesh_GetEnabled("opensync_enable") != enable)
+    if (init || Mesh_GetEnabled("opensync") != enable)
     {
         if(enable && !Mesh_GetEnabled("mesh_ovs_enable")) {
             MeshWarning("OVS is disabled, so we cannt able to enable Opensync\n");
@@ -2943,10 +2943,29 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
     }
     out_val[0]='\0';
 
-    if(Mesh_SysCfgGetStr("opensync_enable", out_val, sizeof(out_val)) != 0)
+    if(Mesh_SysCfgGetStr("opensync", out_val, sizeof(out_val)) != 0)
     {
-        MeshInfo("Syscfg error, Setting opensync mode to default\n");
-        Opensync_Set(false,true,true);
+        out_val[0]='\0';
+        if(Mesh_SysCfgGetStr("opensync_enable", out_val, sizeof(out_val)) != 0)
+        {
+            MeshInfo("Syscfg error, Setting opensync mode to default\n");
+            Opensync_Set(false,true,true);
+        }
+        else
+        {
+            rc = strcmp_s("true",strlen("true"),out_val,&ind);
+            ERR_CHK(rc);
+            if((ind ==0 ) && (rc == EOK))
+            {
+                MeshInfo("Setting initial Opensync mode to true - LEGACY\n");
+                Opensync_Set(true,true,true);
+            }
+            else
+            {
+                MeshInfo("Setting initial Opensync mode to false - LEGACY\n");
+                Opensync_Set(false,true,true);
+            }
+        }
     }
     else
     {
