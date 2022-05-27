@@ -3454,6 +3454,7 @@ static void *Mesh_sysevent_handler(void *data)
         int namelen = sizeof(name);
         int vallen  = sizeof(val);
         int err;
+        char *contextStr = NULL;
         async_id_t getnotification_asyncid;
         errno_t rc       = -1;
         int     ind      = -1;
@@ -3542,7 +3543,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_RADIO_CHANNEL;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -3575,10 +3576,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim,&contextStr);
                         idx++;
                     }
-
+                    contextStr = NULL;
                     if (valFound) {
                         // We filled our data structure so we can send it off
                         msgQSend(&mMsg);
@@ -3601,7 +3602,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_RADIO_CHANNEL_MODE;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -3663,10 +3664,11 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
 
+                    contextStr = NULL;
                     if (valFound) {
                         // We filled our data structure so we can send it off
                         msgQSend(&mMsg);
@@ -3684,7 +3686,7 @@ static void *Mesh_sysevent_handler(void *data)
                     bool process = true;
                     MeshSync mMsg = {0};
                     mMsg.msgType = MESH_WIFI_RADIO_OPERATING_STD;
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
                     while( token != NULL && process)
                     {
                         switch (idx)
@@ -3721,9 +3723,10 @@ static void *Mesh_sysevent_handler(void *data)
                         default:
                             break;
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         msgQSend(&mMsg);
@@ -3747,7 +3750,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_SSID_ADVERTISE;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -3782,9 +3785,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -3808,7 +3812,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_SSID_NAME;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -3849,9 +3853,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -3874,7 +3879,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_SSID_CHANGED;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -3919,9 +3924,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -3966,7 +3972,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_AP_SECURITY;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4034,9 +4040,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -4060,7 +4067,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_AP_KICK_ASSOC_DEVICE;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4100,9 +4107,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -4126,7 +4134,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_AP_KICK_ALL_ASSOC_DEVICES;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4154,9 +4162,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -4180,7 +4189,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_AP_ADD_ACL_DEVICE;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4220,9 +4229,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -4246,7 +4256,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_AP_DEL_ACL_DEVICE;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4286,9 +4296,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -4312,7 +4323,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_MAC_ADDR_CONTROL_MODE;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4354,9 +4365,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -4377,7 +4389,7 @@ static void *Mesh_sysevent_handler(void *data)
                     eMeshWifiStatusType status = MESH_WIFI_STATUS_OFF;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4410,9 +4422,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound && (status == MESH_WIFI_STATUS_FULL || status == MESH_WIFI_STATUS_MONITOR)) {
                         // Mesh Full
@@ -4477,7 +4490,7 @@ static void *Mesh_sysevent_handler(void *data)
                     bool enabled = false;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4510,9 +4523,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         if(enabled==true)
@@ -4541,7 +4555,7 @@ static void *Mesh_sysevent_handler(void *data)
                     char url[128] = {0};
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4576,9 +4590,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -4603,7 +4618,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_SUBNET_CHANGE;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4650,9 +4665,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -4676,7 +4692,7 @@ static void *Mesh_sysevent_handler(void *data)
                     mMsg.msgType = MESH_WIFI_TXRATE;
 
                     // grab the first token
-                    token = strtok(val, delim);
+                    token = strtok_r(val, delim, &contextStr);
 
                     while( token != NULL && process)
                     {
@@ -4762,9 +4778,10 @@ static void *Mesh_sysevent_handler(void *data)
                             break;
 
                         }
-                        token = strtok(NULL, delim);
+                        token = strtok_r(NULL, delim, &contextStr);
                         idx++;
                     }
+                    contextStr = NULL;
 
                     if (valFound) {
                         // We filled our data structure so we can send it off
@@ -4793,6 +4810,7 @@ void Mesh_InitClientList()
 {
     char val[256] = {0};
     errno_t rc = -1;
+    char *contextStr = NULL;
 
 #ifdef MESH_DOWNLOADABLE_MODULE
     FILE *fp = v_secure_popen("r", "dmcli eRT getv Device.Hosts.Host. > /tmp/client_list.txt; /tmp/plume_dnld/usr/ccsp/mesh/active_host_filter.sh /tmp/client_list.txt");
@@ -4810,7 +4828,7 @@ void Mesh_InitClientList()
             char host[MAX_HOSTNAME_LEN] = {0};
             eMeshIfaceType iface = MESH_IFACE_NONE;
 
-            token = strtok(val, delim);
+            token = strtok_r(val, delim, &contextStr);
             while (token != NULL)
             {
                 switch (idx) {
@@ -4840,9 +4858,11 @@ void Mesh_InitClientList()
                 default:
                     break;
                 }
-                token = strtok(NULL, delim);
+                token = strtok_r(NULL, delim, &contextStr);
                 idx++;
             }
+            contextStr = NULL;
+
             // all of the reported entries from the host filter are active
             Mesh_UpdateClientTable(iface, mac, host, true);
         }
