@@ -1039,8 +1039,9 @@ MeshAgent_SetParamStringValue
         char *param;
         char delim[2] = ",";
         int count = 0;
+        char* contextStr = NULL;
 
-        param = strtok(pString, delim);
+        param = strtok_r(pString, delim,&contextStr);
 
         while (param != NULL)
         {
@@ -1083,8 +1084,8 @@ MeshAgent_SetParamStringValue
         	    default:
         	    	break;
         	    }
-        		count ++;
-        		param = strtok(NULL, delim);
+                    count ++;
+                    param = strtok_r(NULL, delim,&contextStr);
         }
 
         MeshInfo("Connected-Client Notification : MAC = %s, Iface = %s, Host = %s, Status = %s \n", pMac, pIface, pHost, pStatus);

@@ -110,6 +110,7 @@ unsigned int HashMe(eMeshIfaceType iface, char *mac)
     char hashStr[MAX_MAC_ADDR_LEN] = {0};
     char *token;
     errno_t rc = -1;
+    char* contextStr = NULL;
 
     // Copy over the string so we don't mess it up.
     rc = strncpy_s(hashStr , sizeof(hashStr), mac, sizeof(hashStr)-1);
@@ -119,13 +120,13 @@ unsigned int HashMe(eMeshIfaceType iface, char *mac)
     }
     
     /* get the first token */
-    token = strtok(hashStr, s);
+    token = strtok_r(hashStr, s, &contextStr);
 
     /* walk through other tokens */
     while( token != NULL )
     {
         hashIdx += (int)strtol(token, NULL, 16);
-        token = strtok(NULL, s);
+        token = strtok_r(NULL, s,&contextStr);
     }
 
     return (hashIdx%MAX_NUMBER_HASH_BUCKETS);
