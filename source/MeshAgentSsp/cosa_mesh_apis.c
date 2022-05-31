@@ -4292,7 +4292,7 @@ static void *Mesh_sysevent_handler(void *data)
                     MeshSync mMsg = {0};
 
                     // Set sync message type
-                    mMsg.msgType = MESH_WIFI_SSID_CHANGED;
+                    mMsg.msgType = g_pMeshAgent->OpensyncEnable?MESH_WIFI_SSID_CHANGED:MESH_WIFI_SSID_NAME;
 
                     // grab the first token
                     token = strtok(val, delim);
@@ -4315,16 +4315,17 @@ static void *Mesh_sysevent_handler(void *data)
                             }
                             break;
                         case 1:
+                            MeshInfo("index=%s\n", token);
                             mMsg.data.wifiSSIDChanged.index = strtol(token,NULL,10);
                             valFound = true;
                             break;
                         case 2:
                             /*Coverity Fix CID:57710 PW.TOO_MANY_PRINTF_ARGS */
-                            mMsg.data.wifiSSIDChanged.enable = strtol(token,NULL,10);
-                            valFound = true;
+                            mMsg.data.wifiSSIDChanged.enable = g_pMeshAgent->OpensyncEnable?strtol(token,NULL,10):0;
+                            valFound = g_pMeshAgent->OpensyncEnable && true;
                             break;
                         case 3:
-                            MeshInfo("ssid received\n");
+                            MeshInfo("ssid received:%s\n", token);
                             rc = strcpy_s(mMsg.data.wifiSSIDChanged.ssid, sizeof(mMsg.data.wifiSSIDChanged.ssid), token);
                             if(rc != EOK)
                             {
