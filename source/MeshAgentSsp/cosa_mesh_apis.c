@@ -241,7 +241,8 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_WIFI_RADIO_OPERATING_STD,         "MESH_WIFI_RADIO_OPERATING_STD",        "wifi_RadioOperatingStd"}
 #ifdef ONEWIFI
     ,
-    {MESH_WIFI_EXTENDER_MODE,               "MESH_WIFI_EXTENDER_MODE",              "onewifi_XLE_Extender_mode"}
+    {MESH_WIFI_EXTENDER_MODE,               "MESH_WIFI_EXTENDER_MODE",              "onewifi_XLE_Extender_mode"},
+    {MESH_ADD_DNSMASQ,                      "MESH_ADD_DNSMASQ",                     "dhcp_conf_change"}
 #endif
 #ifdef WAN_FAILOVER_SUPPORTED
     ,
@@ -818,9 +819,22 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     }
     break;
     case MESH_BRHOME_IP:
+    {
         MeshInfo("Received event MESH_BRHOME_IP %s", rxMsg.data.brhomeIP.ip);
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_BRHOME_IP].sysStr, rxMsg.data.brhomeIP.ip, 0, false);
+    }
     break;
+    case MESH_ADD_DNSMASQ:
+    {
+        char cmd[256] = {0};
+        snprintf(cmd, sizeof(cmd),"interface=%s|dhcp-range=%s,%s,255.255.255.0,infinite",
+                rxMsg.data.STADnsMasqInfo.ifname, rxMsg.data.STADnsMasqInfo.dhcp_start,
+                rxMsg.data.STADnsMasqInfo.dhcp_end);
+        MeshInfo("Received MESH_ADD_DNSMASQ with cmd:%s,leaseTime:%d\n",
+                cmd, rxMsg.data.STADnsMasqInfo.lease_time);
+        Mesh_SyseventSetStr(meshSyncMsgArr[MESH_ADD_DNSMASQ].sysStr, cmd, 0, false);
+        break;
+    }
 #endif
     // the rest of these messages will not come from the Mesh vendor
     case MESH_SUBNET_CHANGE:

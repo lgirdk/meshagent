@@ -105,6 +105,7 @@ typedef enum {
     MESH_WIFI_RADIO_OPERATING_STD,
 #if defined(ONEWIFI)
     MESH_WIFI_EXTENDER_MODE,
+    MESH_ADD_DNSMASQ,
 #endif
 #ifdef WAN_FAILOVER_SUPPORTED
     MESH_BACKUP_NETWORK,
@@ -432,6 +433,17 @@ typedef struct _MeshBrhomeIp {
 } MeshBrhomeIp;
 #endif
 
+#if defined(ONEWIFI)
+typedef struct _MeshSta_dnsmasq_info
+{
+    char ifname[MAX_IFNAME_LEN];
+    char dhcp_start[MAX_IP_LEN];
+    char dhcp_end[MAX_IP_LEN];
+    int lease_time;
+}MeshSta_dnsmasq_info;
+#endif
+
+
 /**
  * Mesh Sync message
  */
@@ -472,6 +484,7 @@ typedef struct _MeshSync {
 #ifdef ONEWIFI
         MeshGetSTAInfo                  staInfo;
         MeshBrhomeIp                    brhomeIP;
+        MeshSta_dnsmasq_info            STADnsMasqInfo;
 #endif
     } data;
 } MeshSync;
