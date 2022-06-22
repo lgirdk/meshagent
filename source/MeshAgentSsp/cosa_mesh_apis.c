@@ -3348,7 +3348,7 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
         ERR_CHK(rc);
         if((ind ==0 ) && (rc == EOK)) {
            MeshInfo("Setting initial Opensync mode to true\n");
-           Opensync_Set(true,true,false);
+           Opensync_Set(true,true,true);
         }
         else
         {
@@ -3356,7 +3356,7 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
 	   ERR_CHK(rc);
 	   if((ind ==0 ) && (rc == EOK)) {
                MeshInfo("Setting initial Opensync mode to false\n");
-               Opensync_Set(false,true,false);
+               Opensync_Set(false,true,true);
 	   } else {
                Opensync_Set(false,true,true);
                MeshInfo("Opensync status error from syscfg , setting default\n");
