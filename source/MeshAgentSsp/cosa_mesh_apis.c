@@ -2273,6 +2273,15 @@ bool OpensyncSetSyscfg(bool enable)
     MeshInfo("opensync enable set in the syscfg successfully\n");
     success = true;
    }
+//Also restore the older syscfg parameter to match the new one
+    if(!enable){
+        if(Mesh_SysCfgSetStr("opensync_enable", "false", true) != 0) {
+            MeshInfo("Failed to disable the Legacy Opensync Enable in syscfg\n");
+        }
+        else {
+            MeshInfo("legacy opensync enable disabled in the syscfg successfully\n");
+        }
+    }
    return success;
 }
 
