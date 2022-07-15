@@ -95,6 +95,7 @@ const int QUEUE_PERMISSIONS=0660;
 const int MAX_MESSAGES=10;  // max number of messages the can be in the queue
 #endif
 
+#define ONEWIFI_ENABLED "/etc/onewifi_enabled"
 #define MESH_ENABLED "/nvram/mesh_enabled"
 #define LOCAL_HOST   "127.0.0.1"
 #define POD_LINK_SCRIPT "/usr/ccsp/wifi/mesh_status.sh"
@@ -177,6 +178,7 @@ static int dnsmasqFd;
 static struct sockaddr_in dnsserverAddr;
 
 extern COSA_DATAMODEL_MESHAGENT* g_pMeshAgent;
+static bool oneWifiEnabled = false;
 
 // Mesh Status structure
 typedef struct
@@ -2894,7 +2896,7 @@ bool Mesh_SetGreAcc(bool enable, bool init, bool commitSyscfg)
         MeshInfo("%s: GRE Acc Commit:%d, Enable:%d\n",
             __FUNCTION__, commitSyscfg, enable);
         if (enable && (!Mesh_GetEnabled(meshSyncMsgArr[MESH_WIFI_ENABLE].sysStr) ||
-            Mesh_GetEnabled("mesh_ovs_enable")))
+            oneWifiEnabled || Mesh_GetEnabled("mesh_ovs_enable")))
         {   // mesh_ovs_enable has higher priority over mesh_gre_acc_enable,
             // therefore when ovs is enabled, disable gre acc.
             MeshWarning("Disabling GreAcc RFC, since OVS is currently enabled!\n");
@@ -2950,6 +2952,7 @@ bool Mesh_SetOVS(bool enable, bool init, bool commitSyscfg)
             MeshError("Unable to %s OVS RFC\n", (enable?"enable":"disable"));
             return false;
         }
+        enable = enable || oneWifiEnabled;
         g_pMeshAgent->OvsEnable = enable;
 
         //Send this as an RFC update to plume manager
@@ -3078,6 +3081,7 @@ bool Opensync_Set(bool enable, bool init, bool commitSyscfg) {
             MeshError("Unable to %s Opensync\n", enable?"enable":"disable");
 	    return false;
         }
+        enable = enable || oneWifiEnabled;
         g_pMeshAgent->OpensyncEnable = enable;
         //Send this as an RFC update to plume manager
         if(enable) {
@@ -5524,7 +5528,8 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     char thread_name[THREAD_NAME_LEN] = { 0 };
     errno_t rc = -1;
     // MeshInfo("Entering into %s\n",__FUNCTION__);
-
+    oneWifiEnabled = (0 == access( ONEWIFI_ENABLED, F_OK ))? true:false;
+    MeshInfo("oneWifi is %s \n", oneWifiEnabled? "enabled" : "disabled");
     // Create our message server thread
     thread_status = pthread_create(&mq_server_tid, NULL, msgQServer, NULL);
     if (thread_status == 0)
