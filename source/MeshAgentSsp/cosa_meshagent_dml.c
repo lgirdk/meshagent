@@ -481,6 +481,7 @@ MeshAgent_GetParamStringValue
     if( (ind == 0) && (rc == EOK))
     {
        // trap the value but don't return anything.
+       strcpy(pValue, "");
        return 0;
     }
     rc = strcmp_s("Data",strlen("Data"),ParamName,&ind);
@@ -488,6 +489,7 @@ MeshAgent_GetParamStringValue
     if( (ind == 0) && (rc == EOK))
     {
        MeshInfo(("Data Get Not supported\n"));
+       strcpy(pValue, "");
        return 0;
     }
 
