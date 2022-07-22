@@ -4344,11 +4344,18 @@ static void *Mesh_sysevent_handler(void *data)
                         case 2:
                             /*Coverity Fix CID:57710 PW.TOO_MANY_PRINTF_ARGS */
                             mMsg.data.wifiSSIDChanged.enable = g_pMeshAgent->OpensyncEnable?strtol(token,NULL,10):0;
-                            valFound = g_pMeshAgent->OpensyncEnable && true;
+                            valFound = true;
                             break;
                         case 3:
                             MeshInfo("ssid received:%s\n", token);
-                            rc = strcpy_s(mMsg.data.wifiSSIDChanged.ssid, sizeof(mMsg.data.wifiSSIDChanged.ssid), token);
+                            if(g_pMeshAgent->OpensyncEnable)
+                            {
+                                rc = strcpy_s(mMsg.data.wifiSSIDChanged.ssid, sizeof(mMsg.data.wifiSSIDChanged.ssid), token);
+                            }
+                            else
+                            {
+                                rc = strcpy_s(mMsg.data.wifiSSIDName.ssid, sizeof(mMsg.data.wifiSSIDName.ssid), token);
+                            }
                             if(rc != EOK)
                             {
                                   ERR_CHK(rc);
