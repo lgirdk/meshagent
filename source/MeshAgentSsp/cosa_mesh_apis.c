@@ -3628,8 +3628,9 @@ void Mesh_sendStaInterface(unsigned char *mesh_sta_name)
         ERR_CHK(rc);
         MeshError("Error in copying Interface name\n");
     }
-    MeshError("Received MESH_WIFI_EXTENDER_MODE msgQsend Interface:%s\n",
-    mMsg.data.onewifiXLEExtenderMode.InterfaceName);
+    MeshInfo("Sysevent set  MESH_WIFI_EXTENDER_MODE cmd:%s\n",mesh_sta_name);
+    Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_EXTENDER_MODE].sysStr, mesh_sta_name, 0, false);
+    MeshInfo("Send MESH_WIFI_EXTENDER_MODE msgQsend Interface:%s\n",mMsg.data.onewifiXLEExtenderMode.InterfaceName);
     msgQSend(&mMsg);
 }
 #endif
