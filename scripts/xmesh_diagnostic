@@ -1,0 +1,167 @@
+#!/bin/sh
+#Very primitive diagnostic tool for xMesh team triage purpose
+#for XLE work
+#TODO: Convert to more sophisticated tool
+xmesh_wfo_dumps()
+{
+echo "====================Debug Dumps=================="
+echo "Ran at:" "`uptime`"
+echo "`cat /version.txt`"
+echo "WFO BHAUL 2.4 Config----"
+echo "`/usr/opensync/tools/ovsh s Wifi_VIF_Config -w if_name==wl0.7 mac_list mac_list_type ssid security enabled`"
+echo "WFO BHAUL 5 Config----"
+echo "`/usr/opensync/tools/ovsh s Wifi_VIF_Config -w if_name==wl1.7 mac_list mac_list_type ssid security enabled`"
+echo "WFO BHAUL 2.4 State----"
+echo "`/usr/opensync/tools/ovsh s Wifi_VIF_State -w if_name==wl0.7 mac_list mac_list_type ssid security enabled`"
+echo "WFO BHAUL 5 State----"
+echo "`/usr/opensync/tools/ovsh s Wifi_VIF_State -w if_name==wl1.7 mac_list mac_list_type ssid security enabled`"
+echo "MAC list in driver wl0.7----"
+echo "wl0.7 mac list: "`wl -i wl0.7 mac`" "Mac mode: " "`wl -i wl0.7 macmode`" "bss: " "`wl -i wl0.7 bss`"
+echo "MAC list in driver wl1.7----"
+echo "wl1.7 mac list: "`wl -i wl1.7 mac`" "Mac mode: " "`wl -i wl1.7 macmode`" "bss: " "`wl -i wl1.7 bss`"
+if [ "`wl -i wl0.7 bss`" == "down" ];then
+ echo -e "\033[31mWFO ERR: BHAUL 2.4GHz BSS is down!! Check Wifi_VIF_Config if enabled is false\033[m" 
+fi
+if [ "`wl -i wl1.7 bss`" == "down" ];then
+ echo -e "\033[31mWFO ERR: BHAUL 5GHz BSS is down!! Check Wifi_VIF_Config if enabled is false\033[m" 
+fi
+echo "WFO AWLAN Redirector----"
+echo "`/usr/opensync/tools/ovsh s AWLAN_Node redirector_addr manager_addr`"
+echo "WFO Manager----"
+echo "`/usr/opensync/tools/ovsh s Manager`"
+echo "WFO Default route----"
+echo "`ip route show default`"
+}
+xmesh_wfo()
+{
+echo "====================Mesh Diagnostic Tool | WFO =================="
+xle_mac="`wl -i wl0.7 assoclist | cut -d" " -f2 | tr '[:upper:]' '[:lower:]'`" 
+if [ "$xle_mac" != "" ];then
+ echo -e "\033[32m$xle_mac is found associated on bhaul\033[m"
+ present_assoctable="`/usr/opensync/tools/ovsh s Wifi_Associated_Clients -w mac=="$xle_mac"`"
+ if [ "$present_assoctable" != "" ];then
+  echo -e "\033[32mWFO Pod mac $xle_mac is present in Wifi_Associated_Clients\033[m"
+ else
+  echo -e "\033[31mWFO ERR: Pod mac $xle_mac is not present in Wifi_Associated_Clients\033[m"
+ fi
+ xle_ip="`/usr/opensync/tools/ovsh s DHCP_leased_IP -w hwaddr=="$xle_mac" | grep inet_addr | cut -d"|" -f2 | sed 's/ //g'`" 
+ if [ "$xle_ip" != "" ];then
+  echo -e "\033[32mWFO Pod BHAUL link local IP--- $xle_ip\033[m"
+  if ping -c 1 $xle_ip &> /dev/null;then 
+   echo -e "\033[32mWFO wl0 IP $xle_ip is reachable\033[m"
+  else
+    echo -e "\033[31mWFO ERR: wl0 IP $xle_ip is unreachable\033[m"
+  fi
+  pdg_name="`/usr/opensync/tools/ovsh s Wifi_Inet_Config -w gre_remote_inet_addr=="$xle_ip" | grep if_name | cut -d"|" -f2 | sed 's/ //g'`"
+  if [ "$pdg_name" != "" ];then   
+   echo -e "\033[32mWFO Tunnel detail\033[m"
+   echo "`ip -d -4 link show $pdg_name`"
+   present_br403="`ovs-vsctl list-ports br403 | grep $pdg_name`"
+   if [ "$present_br403" != "" ];then
+    probable_brhome_ip="`arp -a | grep -i 192.168.245. | grep ether | cut -d"(" -f2 | cut -d")" -f1`"
+    if ping -c 1 $probable_brhome_ip &> /dev/null;then 
+     echo -e "\033[32mWFO br-home IP $probable_brhome_ip is reachable\033[m"
+    echo -e "\033[32mWFO $pdg_name is present in br403 , Everything on main gateway looks good\033[m"
+    else
+     echo -e "\033[31mWFO ERR: br-home IP $probable_brhome_ip is unreachable\033[m"
+    fi
+   else
+    echo -e "\033[31mWFO ERR: $pdg_name is not present in br403\033[m"
+   fi
+  else
+   echo -e "\033[31mWFO ERR: No pgd is inserted for the pod link local\033[m"
+  fi
+ else
+  echo -e "\033[31mWFO ERR: Pod BHAUL link local IP is absent\033[m"
+  echo "`cat /nvram/dnsmasq.leases | grep "169.254."`"
+ fi
+else
+ echo -e "\033[31mWFO ERR: Pod not associated yet!!!\033[m"
+fi
+}
+xmesh_xle_dumps()
+{
+echo "--------- Debug Dumps ---------------"
+echo "wl0 interface---"
+echo "`ifconfig wl0`"
+echo "wl0 status---"
+echo "`wl -i wl0 status`"
+dump_tables="Wifi_VIF_State Wifi_Inet_Config Wifi_Master_State Connection_Manager_Uplink AWLAN_Node Manager"
+for tab in $dump_tables;do
+echo "$tab ---"
+echo "`/usr/opensync/tools/ovsh s $tab`"
+done
+echo "ip routes "`ip route show`""
+echo "ovs switch"
+echo "`ovs-vsctl show`"
+}
+xmesh_xle()
+{
+echo "====================Mesh Diagnostic Tool | XLE=================="
+bssid="`wl -i wl0 bssid`"
+if [ "$bssid" != "" ];then
+ echo -e "\033[32mXLE connected to BSSID: $bssid\033[m" 
+ wl0_ip="`ip addr show wl0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1`"
+if [ "$wl0_ip" != "" ];then
+  echo -e "\033[32mXLE has IP on the wireless station: $wl0_ip\033[m"
+  if [ "`ip -d -4 link show g-wl0 | grep gretap | cut -d" " -f9`" == "$wl0_ip" ];then
+   echo -e "\033[32mXLE GRETAP created with Right Endpoints\033[m"
+   if [ "`ovs-vsctl list-ports br-home | grep g-wl0`" != "" ];then
+    echo -e "\033[32mXLE GRE is present in the br-home\033[m"
+    brhome_ip="`ip addr show br-home | grep "inet\b" | awk '{print $2}' | cut -d/ -f1`"
+    if [ "$brhome_ip" != "" ];then
+     echo -e "\033[32mXLE br-home has valid IP $brhome_ip\033[m"
+     if [ "`ip route show default | grep 192.168.245.254`" != "" ];then
+      echo -e "\033[32mXLE Default Route is set properly\033[m"
+      if ping -c 1 192.168.245.254 &> /dev/null;then
+       echo -e "\033[32mXLE Main gateway is reachable\033[m"
+       if [ "`/usr/opensync/tools/ovsh s Wifi_VIF_Config -w mode==sta parent | grep -i $bssid`" != "" ];then
+        echo -e "\033[32mXLE parent bssid is present in Wifi_VIF_State\033[m"
+       else
+        echo -e "\033[31mXLE parent bssid is not present in Wifi_VIF_State\033[m"
+       fi
+       if [ "`/usr/opensync/tools/ovsh s Manager | grep ACTIVE`" != "" ];then
+        brwan="`psmcli get dmsb.Mesh.WAN.Interface.Name`"
+        if [ "`ovs-vsctl list-ports $brwan | grep g-wl0.200`" != "" ];then
+         echo -e "\033[32mXLE WAN Failover bridge $brwan is created\033[m"
+        else
+         echo -e "\033[31mXLE WAN Failover Network not ready\033[m"
+        fi
+        echo -e "\033[32mXLE Connected to controller since "`/usr/opensync/tools/ovsh s Manager | grep ACTIVE | cut -d"\"" -f6`" seconds\033[m"
+        echo -e "\033[32mXLE Everything looks Good\033[m"
+       else
+        echo -e "\033[31mXLE Not connected to controller yet\033[m"
+       fi
+      else
+       echo -e "\033[31mXLE Main gateway is not reachable\033[m"
+      fi
+     else
+      echo -e "\033[31mXLE Default Route is not set properly\033[m"
+     fi
+    else
+     echo -e "\033[31mXLE br-home does not have valid IP\033[m"
+    fi
+   else
+    echo -e "\033[31mXLE doesnt have the required GRE\033[m"
+   fi
+  else
+   echo -e "\033[31mXLE doesnt have the required GRE\033[m"
+  fi
+ else
+  echo -e "\033[31mNo IP yet on wireless station\033[m"
+#tip2 check if udhcp is running on br-home, if g-wl0 is present in br-home, in main agteway pgd is created
+ fi
+else
+ echo -e "\033[31mWFO ERR: Pod not associated yet!!!\033[m"
+#tip1
+fi
+}
+if [ "`cat /version.txt | grep WNXL11BWL`" != "" ] || [ "`cat /version.txt | grep SIM`" != "" ];then
+ xmesh_xle_dumps
+ xmesh_xle
+elif [ "`cat /version.txt | grep CGM4331COM`" != "" ];then
+ xmesh_wfo_dumps
+ xmesh_wfo
+else
+ echo -e "\033[31mUnrecognized platform\033[m"
+fi
