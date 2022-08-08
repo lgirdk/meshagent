@@ -3827,7 +3827,8 @@ void Mesh_sendStaInterface(char * mesh_sta, bool status)
 
     // Set sync message type
     mMsg.msgType = MESH_WIFI_EXTENDER_MODE;
-    mMsg.data.onewifiXLEExtenderMode.status  = status ?  1 : 0; 
+    mMsg.data.onewifiXLEExtenderMode.status  = status ?  1 : 0;
+    mMsg.data.onewifiXLEExtenderMode.isStatusSet = 1;
     rc = strcpy_s(mMsg.data.onewifiXLEExtenderMode.InterfaceName,
          sizeof(mMsg.data.onewifiXLEExtenderMode.InterfaceName), mesh_sta);
     if(rc != EOK)

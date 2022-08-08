@@ -208,6 +208,7 @@ typedef struct _MeshWifiSSIDChanged {
 typedef struct _MeshWifiXLEExtenderMode {
     char    InterfaceName[MAX_SSID_LEN];
     uint8_t status;
+    uint8_t isStatusSet;
 } MeshWifiXLEExtenderMode;
 
 /**
