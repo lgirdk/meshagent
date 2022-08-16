@@ -2966,6 +2966,14 @@ bool Mesh_SetOVS(bool enable, bool init, bool commitSyscfg)
             MeshError("Unable to %s OVS RFC\n", (enable?"enable":"disable"));
             return false;
         }
+        if (!enable)
+        {
+            MeshInfo("Disabling opensync since OVS is disabled\n");
+            if (!Opensync_Set(false,false,commitSyscfg))
+            {
+                MeshError("Failed to disable Opensync\n");
+            }
+        }
         enable = enable || oneWifiEnabled;
         g_pMeshAgent->OvsEnable = enable;
 
@@ -3088,9 +3096,13 @@ bool Opensync_Set(bool enable, bool init, bool commitSyscfg) {
     if (init || Mesh_GetEnabled("opensync") != enable)
     {
         if(enable && !Mesh_GetEnabled("mesh_ovs_enable")) {
-            MeshWarning("OVS is disabled, so we cannt able to enable Opensync\n");
-            enable = false;
-	}
+            MeshInfo("OVS is disabled. Enabling OVS before enabling opensync\n");
+            if(!Mesh_SetOVS(true,false,commitSyscfg))
+            {
+                MeshError("Facing error while trying to enable OVS\n");
+                return false;
+            }
+        }
         if (commitSyscfg && !OpensyncSetSyscfg(enable) ) {
             MeshError("Unable to %s Opensync\n", enable?"enable":"disable");
 	    return false;
