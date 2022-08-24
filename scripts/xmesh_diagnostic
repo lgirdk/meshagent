@@ -98,15 +98,23 @@ echo "`ovs-vsctl show`"
 xmesh_xle()
 {
 echo "====================Mesh Diagnostic Tool | XLE=================="
-bssid="`wl -i wl0 bssid`"
-if [ "$bssid" != "" ];then
- echo -e "\033[32mXLE connected to BSSID: $bssid\033[m" 
- wl0_ip="`ip addr show wl0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1`"
+if [ "`wl -i wl0 bssid`" != "" ]; then
+ echo -e "\033[32mXLE is connected in 2.4GHz BHAUL BSSID: `wl -i wl0 bssid`\033[m"
+ sta="wl0"
+elif [ "`wl -i wl1 bssid`" != "" ]; then
+ echo -e "\033[32mXLE is connected in 5GHz BHAUL `wl -i wl0 bssid`\033[m"
+ sta="wl1"
+else
+ sta=""
+fi
+
+if [ "$sta" != "" ];then
+ wl0_ip="`ip addr show $sta | grep "inet\b" | awk '{print $2}' | cut -d/ -f1`"
 if [ "$wl0_ip" != "" ];then
   echo -e "\033[32mXLE has IP on the wireless station: $wl0_ip\033[m"
-  if [ "`ip -d -4 link show g-wl0 | grep gretap | cut -d" " -f9`" == "$wl0_ip" ];then
+  if [ "`ip -d -4 link show g-$sta | grep gretap | cut -d" " -f9`" == "$wl0_ip" ];then
    echo -e "\033[32mXLE GRETAP created with Right Endpoints\033[m"
-   if [ "`ovs-vsctl list-ports br-home | grep g-wl0`" != "" ];then
+   if [ "`ovs-vsctl list-ports br-home | grep g-$sta`" != "" ];then
     echo -e "\033[32mXLE GRE is present in the br-home\033[m"
     brhome_ip="`ip addr show br-home | grep "inet\b" | awk '{print $2}' | cut -d/ -f1`"
     if [ "$brhome_ip" != "" ];then
@@ -115,14 +123,14 @@ if [ "$wl0_ip" != "" ];then
       echo -e "\033[32mXLE Default Route is set properly\033[m"
       if ping -c 1 192.168.245.254 &> /dev/null;then
        echo -e "\033[32mXLE Main gateway is reachable\033[m"
-       if [ "`/usr/opensync/tools/ovsh s Wifi_VIF_Config -w mode==sta parent | grep -i $bssid`" != "" ];then
+       if [ "`/usr/opensync/tools/ovsh s Wifi_VIF_Config -w if_name==$sta parent | grep -i $bssid`" != "" ];then
         echo -e "\033[32mXLE parent bssid is present in Wifi_VIF_State\033[m"
        else
         echo -e "\033[31mXLE parent bssid is not present in Wifi_VIF_State\033[m"
        fi
        if [ "`/usr/opensync/tools/ovsh s Manager | grep ACTIVE`" != "" ];then
         brwan="`psmcli get dmsb.Mesh.WAN.Interface.Name`"
-        if [ "`ovs-vsctl list-ports $brwan | grep g-wl0.200`" != "" ];then
+        if [ "`ovs-vsctl list-ports $brwan | grep g-$sta.200`" != "" ];then
          echo -e "\033[32mXLE WAN Failover bridge $brwan is created\033[m"
         else
          echo -e "\033[31mXLE WAN Failover Network not ready\033[m"
