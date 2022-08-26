@@ -59,7 +59,8 @@
 #endif
 
 #define WIFI_STA_INTERFACE_NAME          "Device.WiFi.STA.%d.InterfaceName"
-
+#define WIFI_STA_BSSID                   "Device.WiFi.STA.%d.Bssid"
+#define MAX_BSS_ID                       6
 /*From wifi_hal_generic.h.
  * connection status of STA
  * */
@@ -69,6 +70,10 @@ typedef enum {
    wifi_connection_status_connected,
    wifi_connection_status_ap_not_found
 } wifi_connection_status_t;
+typedef struct {
+    wifi_connection_status_t    connect_status;
+    unsigned char               bssid[MAX_BSS_ID];
+}__attribute__((packed)) wifi_sta_conn_info_t;
 
 /**
  * @brief Defines component Structure

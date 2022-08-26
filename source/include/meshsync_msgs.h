@@ -28,6 +28,7 @@
 #include <sys/types.h>
 #include <inttypes.h>
 
+#define MAX_BSS_ID_STR       18
 #define MAX_SSID_LEN         65
 #define MAX_PASS_LEN         65
 #define MAX_MODE_LEN         25
@@ -51,6 +52,7 @@
 #define MESH_EXTENDER_VLAN   200
 #endif
 #define MAX_IFNAME_LEN       64
+#define MAX_IF               3
 
 #if defined(ENABLE_MESH_SOCKETS)
 /**************************************************************************/
@@ -207,6 +209,7 @@ typedef struct _MeshWifiSSIDChanged {
 
 typedef struct _MeshWifiXLEExtenderMode {
     char    InterfaceName[MAX_SSID_LEN];
+    char    bssid[MAX_BSS_ID_STR];
     uint8_t status;
     uint8_t isStatusSet;
 } MeshWifiXLEExtenderMode;
