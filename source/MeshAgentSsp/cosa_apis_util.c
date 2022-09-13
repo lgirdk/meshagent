@@ -256,5 +256,14 @@ int svcagt_set_service_state (const char *svc_name, bool state)
 	return exit_code;
 }
 
+int svcagt_set_service_restart (const char *svc_name)
+{
+        int exit_code = 0;
+
+        exit_code = v_secure_system ("systemctl restart %s.service", svc_name);
+        if (exit_code != 0)
+                CcspTraceError(("Command systemctl restart %s.service failed with exit %d, errno %s\n", svc_name, exit_code, strerror(errno)));
+        return exit_code;
+} 
 
 #endif // _RDKB_MESH_UTILS_C_

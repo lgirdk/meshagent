@@ -143,6 +143,9 @@ pthread_mutex_t mesh_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED)
 extern char g_Subsystem[32];
 rbusHandle_t handle;
+#define      RBUS_DEVICE_MODE        "Device.X_RDKCENTRAL-COM_DeviceControl.DeviceNetworkingMode"
+#define      RBUS_STA_STATUS         "Device.WiFi.STA.*.Connection.Status"
+#define      RBUS_STA_STATUS_INDEX   "Device.WiFi.STA.%d.Connection.Status"
 #endif
 #ifdef WAN_FAILOVER_SUPPORTED
 static bool meshWANStatus = false;
@@ -172,6 +175,7 @@ MeshStaStatus_node sta[MAX_IF];
 MeshStaStatus_node * searchStaActive();
 static unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
 static unsigned char mesh_sta_bssid[MAX_BSS_ID_STR];
+static int device_mode = 0;
 #endif
 
 //Prash
@@ -2733,7 +2737,7 @@ void staConnStatusHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 
     MeshInfo("%s:%d Rbus event name=%s\n",__FUNCTION__, __LINE__, event->name);
 
-    sscanf(event->name, "Device.WiFi.STA.%d.Connection.Status", &index);
+    sscanf(event->name, RBUS_STA_STATUS_INDEX, &index);
     temp_buff = rbusValue_GetBytes(value, &len);
     if (temp_buff == NULL) {
         MeshError("%s:%d Rbus get string failure len=%d\n", __FUNCTION__, __LINE__, len);
@@ -2786,15 +2790,55 @@ void staConnStatusHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
     return;
 }
 
+void deviceModeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEventSubscription_t* subscription)
+{
+    (void)handle;
+    (void)subscription;
+    int err = 0;
+    int new_device_mode;
+
+    rbusValue_t value = rbusObject_GetValue(event->data, NULL );
+    if(!value)
+    {
+        MeshError("%s:%d FAIL: value is NULL\n",__FUNCTION__, __LINE__);
+        return;
+    }
+
+    MeshInfo("%s:%d Rbus event name=%s\n",__FUNCTION__, __LINE__, event->name);
+
+    new_device_mode = rbusValue_GetUInt32(value);
+    MeshInfo("New Device Mode = %d, Old Device Mode = %d",new_device_mode,device_mode);
+    if(new_device_mode != device_mode)
+    {
+        //restart mesh
+	MeshInfo("Restart Mesh");
+        if ((err = svcagt_set_service_restart (meshServiceName)) != 0)
+            MeshInfo("Restart Mesh failed");
+        device_mode = new_device_mode;
+    }
+}
+
 bool subscribeStaConnectionStatus()
 {
-    char name[64] = "Device.WiFi.STA.*.Connection.Status";
     bool ret = true;
 
-    MeshInfo("Rbus events subscription start %s\n",name);
-    ret = rbusEvent_Subscribe(handle, name, staConnStatusHandler, NULL, 0);
+    MeshInfo("Rbus events subscription start %s\n",RBUS_STA_STATUS);
+    ret = rbusEvent_Subscribe(handle, RBUS_STA_STATUS, staConnStatusHandler, NULL, 0);
     if (ret != RBUS_ERROR_SUCCESS) {
-        MeshError("Rbus events subscribe failed:%s\n",name);
+        MeshError("Rbus events subscribe failed:%s\n",RBUS_STA_STATUS);
+        ret = false;
+    }
+   return ret;
+}
+
+bool subscribeDeviceMode()
+{
+    bool ret = true;
+
+    MeshInfo("Rbus events subscription start %s\n",RBUS_DEVICE_MODE);
+    ret = rbusEvent_Subscribe(handle, RBUS_DEVICE_MODE, deviceModeHandler, NULL, 0);
+    if (ret != RBUS_ERROR_SUCCESS) {
+        MeshError("Rbus events subscribe failed:%s\n",RBUS_DEVICE_MODE);
         ret = false;
     }
    return ret;
@@ -2833,7 +2877,7 @@ int get_sta_active_interface_name()
             MeshInfo ("Parameter %2d:\n\r", i+1);
             if(type == RBUS_BYTES) {
                 temp_buff = rbusValue_GetBytes(val, &len);
-                sscanf(rbusProperty_GetName(next), "Device.WiFi.STA.%d.Connection.Status", &index);
+                sscanf(rbusProperty_GetName(next),RBUS_STA_STATUS_INDEX, &index);
                 if (temp_buff == NULL) {
                     MeshError("%s:%d Rbus get string failure len=%d\n", __FUNCTION__, __LINE__, len);
                     return -1;
@@ -5784,6 +5828,9 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
 #ifdef ONEWIFI
     get_sta_active_interface_name();
     subscribeStaConnectionStatus();
+    subscribeDeviceMode();
+    device_mode = Mesh_SysCfgGetInt("Device_Mode");
+    MeshInfo("Current device mode = %d\n",device_mode);
 #endif
     // MeshInfo("Exiting from %s\n",__FUNCTION__);
     return status;

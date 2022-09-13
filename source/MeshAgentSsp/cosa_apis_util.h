@@ -54,6 +54,7 @@ int Mesh_SysCfgSetStr(const char *name, unsigned char *str_value, bool toArm);
 
 int svcagt_get_service_state (const char *svc_name);
 int svcagt_set_service_state (const char *svc_name, bool state);
+int svcagt_set_service_restart (const char *svc_name);
 bool Opensync_Set(bool enable, bool init, bool commitSyscfg);
 
 #endif /* MESHAGENT_SOURCE_MESHAGENT_MESHUTILS_H_ */
