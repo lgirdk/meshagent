@@ -68,6 +68,34 @@ AC_ARG_ENABLE([onewifi],
 
 AM_CONDITIONAL([FEATURE_ONEWIFI], [test $FEATURE_ONEWIFI = yes])
 
+FEATURE_GATEWAY_FAILOVER_SUPPORTED=no
+AC_ARG_ENABLE([gatewayfailoversupport],
+        AS_HELP_STRING([--enable-gatewayfailoversupport],[enable gatewayfailoversupport]),
+        [
+          case "${enableval}" in
+           yes) FEATURE_GATEWAY_FAILOVER_SUPPORTED=yes ;;
+           no) AC_MSG_ERROR([gatewayfailoversupport is disabled]) ;;
+          *) AC_MSG_ERROR([bad value ${enableval} for --enable-gatewayfailoversupport ]) ;;
+           esac
+           ],
+         [echo "gatewayfailoversupport is disabled."])
+
+AM_CONDITIONAL([FEATURE_GATEWAY_FAILOVER_SUPPORTED], [test $FEATURE_GATEWAY_FAILOVER_SUPPORTED = yes])
+
+FEATURE_RDKB_EXTENDER_ENABLED=no
+AC_ARG_ENABLE([rdkb_extender],
+        AS_HELP_STRING([--enable-rdkb_extender],[enable rdkb_extender]),
+        [
+          case "${enableval}" in
+           yes) FEATURE_RDKB_EXTENDER_ENABLED=yes ;;
+           no) AC_MSG_ERROR([rdkb_extender is disabled]) ;;
+          *) AC_MSG_ERROR([bad value ${enableval} for --enable-rdkb_extender ]) ;;
+           esac
+           ],
+         [echo "rdkb_extender is disabled."])
+
+AM_CONDITIONAL([FEATURE_RDKB_EXTENDER_ENABLED], [test $FEATURE_RDKB_EXTENDER_ENABLED = yes])
+
 AC_PREFIX_DEFAULT(`pwd`)
 AC_ENABLE_SHARED
 AC_DISABLE_STATIC

@@ -55,12 +55,17 @@
 #define EVENT_MESH_WAN_LINK              "Device.X_RDK_MeshAgent.MeshWANLink.Status"
 #define EVENT_MESH_WAN_IFNAME            "Device.X_RDK_MeshAgent.MeshWANLink.Interface.Name"
 #define MESH_WAN_INTERFACE               "dmsb.Mesh.WAN.Interface.Name"
-#define NUM_OF_RBUS_PARAMS                2
+#define NUM_OF_RBUS_PARAMS                3
 #endif
 
 #define WIFI_STA_INTERFACE_NAME          "Device.WiFi.STA.%d.InterfaceName"
 #define WIFI_STA_BSSID                   "Device.WiFi.STA.%d.Bssid"
 #define MAX_BSS_ID                       6
+#define EVENT_MESH_BACKHAUL_IFNAME       "Device.X_RDK_MeshAgent.MeshBackHaul.Ifname"
+#define      AP_ACTIVE                0
+#define      STA_ACTIVE               1
+#define      GATEWAY_MODE             0
+#define      EXTENDER_MODE            1
 /*From wifi_hal_generic.h.
  * connection status of STA
  * */
@@ -74,6 +79,12 @@ typedef struct {
     wifi_connection_status_t    connect_status;
     unsigned char               bssid[MAX_BSS_ID];
 }__attribute__((packed)) wifi_sta_conn_info_t;
+
+typedef enum {
+    MESH_TYPE_BOOL,
+    MESH_TYPE_INT,
+    MESH_TYPE_STRING
+}rbus_type_t;
 
 /**
  * @brief Defines component Structure

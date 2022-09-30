@@ -36,6 +36,9 @@
 #include "ansc_wrapper_base.h"
 #include "secure_wrapper.h"
 
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
+extern unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
+#endif
 extern int sysevent_fd_gs;
 extern token_t sysevent_token_gs;
 
@@ -151,7 +154,7 @@ int Mesh_SysCfgGetInt(const char *name)
    else
    {
       MeshInfo(("syscfg_get failed\n"));
-      return -1;
+      return 0;
    }
 }
 
@@ -264,6 +267,320 @@ int svcagt_set_service_restart (const char *svc_name)
         if (exit_code != 0)
                 CcspTraceError(("Command systemctl restart %s.service failed with exit %d, errno %s\n", svc_name, exit_code, strerror(errno)));
         return exit_code;
-} 
+}
 
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
+int nif_ioctl(int cmd, void *buf)
+{
+    static int fd = -1;
+    int rc;
+    int retval = 0;
+    if (fd < 0)
+    {
+        fd = socket(AF_INET, SOCK_DGRAM, 0);
+        if (fd < 0)
+        {
+            MeshInfo("nif_ioctl: socket() failed.");
+            retval = errno;
+            return retval;
+        }
+    }
+    rc = ioctl(fd, cmd, buf);
+    if (rc != 0)
+    {
+        retval = errno;
+    }
+
+    return retval;
+}
+
+int nif_ifreq(int cmd, char *ifname, struct ifreq *req)
+{
+    errno_t rc = -1;
+    int tries = 0;
+
+    rc = strcpy_s(req->ifr_name,sizeof(req->ifr_name),ifname);
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+        MeshError("Error in copying ifname\n");
+    }
+    while (tries++ < 25)
+    {
+        rc = nif_ioctl(cmd, req);
+       if(rc == 0)
+       {
+           break;
+       }
+       MeshError("cmd: %d, %s\n",cmd,strerror(errno));
+        usleep(500*1000);
+    }
+    return rc;
+}
+
+bool nif_exists(char *ifname, bool *exists)
+{
+    struct ifreq    req;
+    int             rc;
+
+    /*
+     * Check if the device exists by retrieving the device index.
+     * If this fails the device definitely does not exist.
+     * */
+    rc = nif_ifreq(SIOCGIFINDEX, ifname, &req);
+    if (rc != 0)
+    {
+        *exists = false;
+    }
+    else
+    {
+        *exists = true;
+    }
+
+    return true;
+}
+
+/*
+ * Retrieve the ip address of the interface @p ifname
+ */
+bool nif_ipaddr_get(char* ifname, os_ipaddr_t* addr)
+{
+    int             rc;
+    struct ifreq    req;
+
+    /* Requesting an internet address */
+    req.ifr_addr.sa_family = AF_INET;
+
+    rc = nif_ifreq(SIOCGIFADDR, ifname, &req);
+    if (rc != 0)
+    {
+        MeshInfo("nif_ipaddr: SIOCGIFADDR failed.::ifname=%s", ifname);
+        return false;
+    }
+
+    memcpy(addr, &(((struct sockaddr_in *)&req.ifr_addr)->sin_addr.s_addr),4);
+
+    return true;
+}
+
+/*
+ * Retrieve the netmask of the interface @p ifname
+ */
+bool nif_netmask_get(char* ifname, os_ipaddr_t* addr)
+{
+    int             rc;
+    struct ifreq    req;
+
+    /* Requesting an internet address */
+    req.ifr_netmask.sa_family = AF_INET;
+
+    rc = nif_ifreq(SIOCGIFNETMASK, ifname, &req);
+    if (rc != 0)
+    {
+        MeshInfo("nif_ipaddr:SIOCGIFNETMASK failed::ifname=%s", ifname);
+        return false;
+    }
+
+    memcpy(addr,
+            &((struct sockaddr_in *)&req.ifr_netmask)->sin_addr.s_addr,4);
+
+    return true;
+}
+
+bool get_ipaddr_subnet(char * ifname, char *local_ip, char * remote_ip)
+{
+    int i;
+    os_ipaddr_t ipaddr,subnet;
+    bool ret = true;
+    MeshInfo("get_ipaddr_subnet: start\n");
+    if (nif_ipaddr_get(ifname, &ipaddr))
+    {
+        if (nif_netmask_get(ifname, &subnet))
+        {
+            for (i =0; i<MAX_IPV4_BYTES; i++)
+            {
+                if(subnet.addr[i]!=0)
+                    subnet.addr[i] = ipaddr.addr[i];
+                else
+                    subnet.addr[i] = 1;
+            }
+            if(snprintf(local_ip,MAX_IP_LEN , PRI(os_ipaddr_t), FMT(os_ipaddr_t, ipaddr)))
+                MeshInfo("%s: if_name[%s] local ip addr[%s]\n", __func__, ifname,local_ip);
+            if(snprintf(remote_ip,MAX_IP_LEN , PRI(os_ipaddr_t), FMT(os_ipaddr_t, subnet)))
+               MeshInfo("%s: if_name[%s] remote ip addr[%s]\n", __func__, ifname,remote_ip);
+        }
+    }
+    else
+    {
+        MeshInfo("udhcpc: %s interface didnt get ip\n",ifname);
+        ret = false;
+    }
+    return ret;
+}
+
+int udhcpc_pid(char *ifname)
+{
+    char pid_file[256];
+    FILE *f;
+    int pid;
+    int rc;
+
+    snprintf(pid_file, sizeof(pid_file), "/var/run/udhcpc-%s.pid", ifname);
+    f = fopen(pid_file, "r");
+    if (f == NULL) return 0;
+    rc = fscanf(f, "%d", &pid);
+    fclose(f);
+
+    /* We should read exactly 1 element */
+    if (rc != 1)
+    {
+        return 0;
+    }
+
+    if (kill(pid, 0) != 0)
+    {
+        return 0;
+    }
+
+    return pid;
+}
+
+bool udhcpc_start(char* ifname)
+{
+    char pidfile[256];
+    pid_t pid;
+    //char  udhcpc_s_option[256];
+    int status;
+
+    MeshInfo("Mesh udhcpc_start....");
+    pid = udhcpc_pid(ifname);
+    if (pid > 0)
+    {
+        MeshError("DHCP client already running::ifname=%s", ifname);
+        return true;
+    }
+
+    snprintf(pidfile, sizeof(pidfile), "/var/run/udhcpc-%s.pid", ifname);
+    //snprintf(udhcpc_s_option, sizeof(udhcpc_s_option), "/usr/opensync/scripts/udhcpc.sh");
+
+    char *argv_apply[] = {
+       "/sbin/udhcpc",
+       "-p", pidfile,
+       //"-s", udhcpc_s_option,
+       "-i", ifname,
+       NULL
+    };
+
+    pid = fork();
+    if (pid == 0)
+    {
+        if (fork() == 0)
+        {
+            MeshInfo("%s: %%s option \n", __func__);
+            execv("/sbin/udhcpc", argv_apply);
+        }
+        exit(0);
+    }
+
+    /* Wait for the first child -- it should exit immediately */
+    waitpid(pid, &status, 0);
+
+    return true;
+}
+
+bool udhcpc_stop(char* ifname)
+{
+    int pid = udhcpc_pid(ifname);
+    MeshInfo("udhcpc_stop is called %s", ifname);
+    if (pid <= 0)
+    {
+        MeshInfo("DHCP client not running::ifname=%s", ifname);
+        return true;
+    }
+
+    int signum = SIGTERM;
+    int tries = 0;
+
+    while (kill(pid, signum) == 0)
+    {
+        if (tries++ > 20)
+        {
+            signum = SIGKILL;
+        }
+
+        usleep(100*1000);
+    }
+
+    return true;
+}
+
+int handle_uplink_bridge(char *ifname, char * bridge_ip, char *pod_addr, bool create)
+{
+    int rc = -1;
+
+    if(create)
+    {
+        MeshDebug("Entering %s with ifname = %s, bridge_ip = %s, pod_addr = %s,\n", __FUNCTION__, ifname, bridge_ip, pod_addr);
+        rc = v_secure_system("/usr/bin/ovs-vsctl del-br %s", MESH_BHAUL_BRIDGE);
+        if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        {
+            MeshWarning("Failed to remove bridge %s\n",MESH_BHAUL_BRIDGE);
+        }
+
+	rc = v_secure_system("ip link add g-%s type gretap local %s remote %s dev %s tos 1", ifname, bridge_ip, pod_addr, ifname);
+        if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        {
+            MeshError("Failed to create g-%s GRE tap with local IP: %s and remote IP %s\n", ifname, bridge_ip, pod_addr);
+            return -1;
+        }
+
+        rc = v_secure_system("/sbin/ifconfig g-%s up", ifname);
+        if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        {
+            MeshError("Failed to bring g-%s up", ifname);
+            return -1;
+        }
+
+        rc = v_secure_system("/usr/bin/ovs-vsctl add-br %s",GATEWAY_FAILOVER_BRIDGE);
+        if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        {
+            MeshError("Failed to add bridge %s", GATEWAY_FAILOVER_BRIDGE);
+            return -1;
+        }
+
+        rc = v_secure_system("/usr/bin/ovs-vsctl add-port %s g-%s",GATEWAY_FAILOVER_BRIDGE,ifname);
+        if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        {
+            MeshError("Failed to add g-%s to bridge %s", ifname, GATEWAY_FAILOVER_BRIDGE);
+            return -1;
+        }
+
+        rc = v_secure_system("/sbin/ifconfig %s  up", GATEWAY_FAILOVER_BRIDGE);
+        if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        {
+            MeshError("Failed to bring %s up", GATEWAY_FAILOVER_BRIDGE);
+            return -1;
+        }
+    }
+    else
+    {
+        rc = v_secure_system("/usr/bin/ovs-vsctl del-port %s g-%s", GATEWAY_FAILOVER_BRIDGE,mesh_sta_ifname);
+        if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        {
+            MeshWarning("Failed to remove bridge %s from g-%s\n",GATEWAY_FAILOVER_BRIDGE,mesh_sta_ifname);
+        }
+        rc = v_secure_system("ip link del g-%s", mesh_sta_ifname);
+        if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        {
+            MeshWarning("Failed to delete g-%s, maybe it doesn't exist?\n", mesh_sta_ifname);
+        }
+        rc = v_secure_system("/usr/bin/ovs-vsctl del-br %s", GATEWAY_FAILOVER_BRIDGE);
+        if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        {
+            MeshWarning("Failed to remove bridge %s \n",GATEWAY_FAILOVER_BRIDGE);
+        }
+    }
+    return 0;
+}
+#endif
 #endif // _RDKB_MESH_UTILS_C_

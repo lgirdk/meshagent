@@ -26,7 +26,21 @@
 #ifndef MESHAGENT_SOURCE_MESHAGENT_MESHUTILS_H_
 #define MESHAGENT_SOURCE_MESHAGENT_MESHUTILS_H_
 #include <stdbool.h>
+#include "safec_lib_common.h"
+#include <net/if.h>
+#include <sys/ioctl.h>
 #include "meshsync_msgs.h"
+
+#define      PRI(type)                PRI_ ## type
+#define      FMT(type, x)             FMT_ ## type (x)
+#define      PRI_os_ipaddr_t          "%d.%d.%d.%d"
+#define      FMT_os_ipaddr_t(x)       (x).addr[0], (x).addr[1], (x).addr[2], (x).addr[3]
+#define      MAX_IPV4_BYTES           4
+#define      GATEWAY_FAILOVER_BRIDGE  "brSTA"
+#define      MESH_BHAUL_BRIDGE        "br403"
+#define      MESH_XLE_BRIDGE          "br-home"
+
+typedef struct { unsigned char addr[MAX_IPV4_BYTES]; } os_ipaddr_t;
 
 bool Mesh_SetGreAcc(bool enable, bool init, bool commitSyscfg);
 eMeshStateType Mesh_GetMeshState();
@@ -57,4 +71,14 @@ int svcagt_set_service_state (const char *svc_name, bool state);
 int svcagt_set_service_restart (const char *svc_name);
 bool Opensync_Set(bool enable, bool init, bool commitSyscfg);
 
+int nif_ifreq(int cmd, char *ifname, struct ifreq *req);
+bool get_ipaddr_subnet(char * ifname, char *local_ip, char * remote_ip);
+bool nif_netmask_get(char* ifname, os_ipaddr_t* addr);
+bool nif_ipaddr_get(char* ifname, os_ipaddr_t* addr);
+bool nif_exists(char *ifname, bool *exists);
+int  nif_ioctl(int cmd, void *buf);
+int handle_uplink_bridge(char *ifname, char * bridge_ip, char *pod_addr, bool create);
+bool udhcpc_stop(char* ifname);
+bool udhcpc_start(char* ifname);
+int udhcpc_pid(char *ifname);
 #endif /* MESHAGENT_SOURCE_MESHAGENT_MESHUTILS_H_ */

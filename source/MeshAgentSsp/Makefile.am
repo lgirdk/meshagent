@@ -32,3 +32,13 @@ endif
 if FEATURE_ONEWIFI
 libMeshAgentSsp_la_CPPFLAGS += -DONEWIFI
 endif
+if FEATURE_GATEWAY_FAILOVER_SUPPORTED
+libMeshAgentSsp_la_CPPFLAGS += -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/rbus
+libMeshAgentSsp_la_LDFLAGS += -lrbus
+libMeshAgentSsp_la_CPPFLAGS += -DGATEWAY_FAILOVER_SUPPORTED
+endif
+if FEATURE_RDKB_EXTENDER_ENABLED
+libMeshAgentSsp_la_CPPFLAGS += -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/rbus
+libMeshAgentSsp_la_LDFLAGS += -lrbus
+libMeshAgentSsp_la_CPPFLAGS += -DRDKB_EXTENDER_ENABLED
+endif

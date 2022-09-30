@@ -34,6 +34,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <net/if.h>
 #include <string.h>
 #include <stdarg.h>
 #include "stdbool.h"
@@ -80,7 +81,7 @@ extern void initparodusTask();
 #define MAX_CONNECTED_CLIENTS 10  // maximum number of connected clients
 const char meshSocketPath[] = MESH_SOCKET_PATH_NAME;
 static int clientSockets[MAX_CONNECTED_CLIENTS] = {0};
-static int clientSocketsMask = 0; //Prash
+static int clientSocketsMask = 0;
 static int meshError = MB_OK;
 #else
 /*
@@ -116,7 +117,6 @@ static bool isPaceXF3 = false;
 static bool isSkyHUB4 = false;
 bool isXB3Platform = false;
 #define ETHBHAUL_SWITCH "/usr/sbin/deviceinfo.sh"
-#define MESH_BHAUL_BRIDGE "br403"
 #define MESH_BHAUL_INETADDR "192.168.245.254"
 #define MESH_BHAUL_INETMASK "255.255.255.0"
 static bool s_SysEventHandler_ready = false;
@@ -139,11 +139,53 @@ pthread_mutex_t mesh_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define _DEBUG 1
 #define THREAD_NAME_LEN 16 //length is restricted to 16 characters, including the terminating null byte
 
-#if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED)
+#if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED) || defined(GATEWAY_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 extern char g_Subsystem[32];
+
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 #define      RBUS_DEVICE_MODE        "Device.X_RDKCENTRAL-COM_DeviceControl.DeviceNetworkingMode"
+#endif
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+#define      RBUS_GATEWAY_PRESENT    "Device.X_RDK_GatewayManagement.ExternalGatewayPresent"
+#endif
+#if defined(ONEWIFI)
 #define      RBUS_STA_STATUS         "Device.WiFi.STA.*.Connection.Status"
 #define      RBUS_STA_STATUS_INDEX   "Device.WiFi.STA.%d.Connection.Status"
+#endif
+
+typedef enum
+{
+#if defined(ONEWIFI)
+    MESH_RBUS_STA_STATUS,
+#endif
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
+    MESH_RBUS_DEVICE_MODE,
+#endif
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+    MESH_RBUS_GATEWAY_PRESENT,
+#endif
+    MESH_RBUS_EVENT_TOTAL
+} eMeshRbusEventType;
+
+typedef struct _MeshRbusEvent
+{
+   eMeshRbusEventType eType;
+   char name[MAX_IFNAME_LEN]; 
+   bool status;
+}MeshRbusEvent;
+
+MeshRbusEvent  meshRbusEvent[] = {
+#if defined(ONEWIFI)
+    {MESH_RBUS_STA_STATUS,                       RBUS_STA_STATUS,                      false},
+#endif
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
+    {MESH_RBUS_DEVICE_MODE,                      RBUS_DEVICE_MODE,                     false},
+#endif
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+    {MESH_RBUS_GATEWAY_PRESENT,                  RBUS_GATEWAY_PRESENT,                 false}
+#endif
+};
+rbusError_t publishRBUSEvent(char* event_name , void *event_val,rbus_type_t type);
 #endif
 
 rbusHandle_t handle;
@@ -164,10 +206,11 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
 rbusDataElement_t meshRbusDataElements[NUM_OF_RBUS_PARAMS] = {
 
         {EVENT_MESH_WAN_LINK, RBUS_ELEMENT_TYPE_EVENT, {rbusGetBoolHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
-        {EVENT_MESH_WAN_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, NULL, NULL}}
+        {EVENT_MESH_WAN_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, NULL, NULL}},
+	{EVENT_MESH_BACKHAUL_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}}
 };
 #endif
-#if defined(ONEWIFI)
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
 typedef struct _MeshStaStatus_node
 {
    char sta_ifname[MAX_IFNAME_LEN];
@@ -178,12 +221,19 @@ typedef struct _MeshStaStatus_node
 
 MeshStaStatus_node sta[MAX_IF];
 MeshStaStatus_node * searchStaActive();
-static unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
-static unsigned char mesh_sta_bssid[MAX_BSS_ID_STR];
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
 static int device_mode = 0;
 #endif
+unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
+static unsigned char mesh_sta_bssid[MAX_BSS_ID_STR];
+unsigned char mesh_backhaul_ifname[MAX_IFNAME_LEN];
+#endif
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+static int is_uplink_tid_exist = 0;
+static int gateway_present = -1;
+static pthread_t tid_handle;
+#endif
 
-//Prash
 static int dnsmasqFd;
 static struct sockaddr_in dnsserverAddr;
 
@@ -300,6 +350,9 @@ static void Mesh_sendReducedRetry(bool value);
 void Mesh_sendStaInterface(char * mesh_sta,char *bssid, bool status);
 int get_sta_active_interface_name();
 #endif
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+void rbus_get_gw_present();
+#endif
 static int Mesh_Init(ANSC_HANDLE hThisObject);
 static void Mesh_InitClientList();
 static void changeChBandwidth( int, int);
@@ -308,7 +361,6 @@ static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf);
 static BOOL is_configure_wifi_enabled();
 #ifdef WAN_FAILOVER_SUPPORTED
 bool Mesh_ExtenderBridge(char *ifname);
-rbusError_t publishRBUSEvent(char* event_name , bool event_val);
 #endif
 
 static char EthPodMacs[MAX_POD_COUNT][MAX_MAC_ADDR_LEN];
@@ -515,7 +567,6 @@ static bool Mesh_PodAddress(char *mac, bool add)
   return FALSE;
 }
 
-//Prash
 /**
  *  @brief MeshAgent Process Send Pod mac to dnsmasq for filtering
  *
@@ -806,6 +857,7 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     {
         char cmd[256]={0};
         int rc = -1;
+	int connect = 0;
         MeshInfo("Received MESH_BACKUP_NETWORK for %s\n", rxMsg.data.networkType.type ? "Gateway" : "Extender");
         if (Mesh_ExtenderBridge(rxMsg.data.networkType.ifname))
         {
@@ -820,7 +872,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_BACKUP_NETWORK].sysStr, cmd, 0, false);
         if (rbusSubscribed)
         {
-            rc = publishRBUSEvent(EVENT_MESH_WAN_LINK,meshWANStatus);
+            connect = meshWANStatus ?  1 : 0;
+            rc = publishRBUSEvent(EVENT_MESH_WAN_LINK, (void *)&connect,MESH_TYPE_BOOL);
             if(rc == RBUS_ERROR_SUCCESS)
             {
                 MeshInfo(("Published MeshWANLink status value.\n"));
@@ -1325,7 +1378,7 @@ static void* msgQServer(void *data)
                 if( clientSockets[i] == 0 )
                 {
                     clientSockets[i] = new_socket;
-                    //Prash: Maintain a bitfield to see if any connected
+                    //Maintain a bitfield to see if any connected
                     clientSocketsMask |= (1 << i);
                     MeshInfo("Adding connected client to list of sockets as %d\n" , i);
                     Mesh_sendDhcpLeaseSync();
@@ -2503,22 +2556,37 @@ bool Mesh_ExtenderBridge(char *ifname)
 
     return status;
 }
-
+#endif
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI)
 /**
  * @brief Mesh publishRBUSEvent
  *
  * Publish event after event value gets updated
  */
-rbusError_t publishRBUSEvent(char* event_name , bool event_val)
+rbusError_t publishRBUSEvent(char* event_name , void *val, rbus_type_t type)
 {
     rbusEvent_t event;
     rbusObject_t data;
     rbusValue_t value;
+    bool event_val;
     rbusError_t ret = RBUS_ERROR_SUCCESS;
 
     //initialize and set new value for the event
     rbusValue_Init(&value);
-    rbusValue_SetBoolean(value, event_val);
+
+    switch(type)
+    {
+    case MESH_TYPE_BOOL:
+        event_val = *((int  *)val) ?  true : false;
+	rbusValue_SetBoolean(value, event_val);
+    break;
+    case MESH_TYPE_STRING:
+        rbusValue_SetString(value, (char *)val);
+    break;
+    default:
+        MeshError("publishRBUSEvent default parameter\n"); 
+        break;
+    }
 
     //initialize and set rbusObject with desired values
     rbusObject_Init(&data, NULL);
@@ -2538,7 +2606,8 @@ rbusError_t publishRBUSEvent(char* event_name , bool event_val)
     rbusObject_Release(data);
     return ret;
 }
-
+#endif
+#if defined(WAN_FAILOVER_SUPPORTED)
 /**
  * @brief Mesh rbusGetStringHandler
  *
@@ -2564,6 +2633,10 @@ rbusError_t rbusGetStringHandler(rbusHandle_t handle, rbusProperty_t property, r
 
         if (rc)
             rbusValue_SetString(value, meshWANIfname);
+    }
+    else if (strcmp(name, EVENT_MESH_BACKHAUL_IFNAME) == 0 )
+    {
+        rbusValue_SetString(value, mesh_backhaul_ifname);
     }
     else
     {
@@ -2609,13 +2682,17 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
     (void)interval;
     (void)autoPublish;
     MeshInfo(
-        "eventSubHandler11 called:\n" \
+        "eventSubHandler called:\n" \
         "\taction=%s\n" \
         "\teventName=%s\n",
         action == RBUS_EVENT_ACTION_SUBSCRIBE ? "subscribe" : "unsubscribe",
         eventName);
 
     if(!strcmp(EVENT_MESH_WAN_LINK, eventName))
+    {
+        rbusSubscribed  = action == RBUS_EVENT_ACTION_SUBSCRIBE ?true : false;
+    }
+    else if (!strcmp(EVENT_MESH_BACKHAUL_IFNAME, eventName))
     {
         rbusSubscribed  = action == RBUS_EVENT_ACTION_SUBSCRIBE ?true : false;
     }
@@ -2626,8 +2703,7 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
     return RBUS_ERROR_SUCCESS;
 }
 #endif
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI)
-#if defined(ONEWIFI)
+#if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED) || defined(GATEWAY_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 MeshStaStatus_node *  addSta(int index,  bool state)
 {
     sta[index].state = state;
@@ -2662,8 +2738,6 @@ MeshStaStatus_node * searchStaActive()
     return NULL;
 }
 #endif
-#endif
-
 /**
  * @brief Mesh meshRbusInit
  *
@@ -2672,7 +2746,7 @@ MeshStaStatus_node * searchStaActive()
 rbusError_t meshRbusInit()
 {
     int rc = RBUS_ERROR_SUCCESS;
-#ifdef WAN_FAILOVER_SUPPORTED
+#if defined(WAN_FAILOVER_SUPPORTED)
     if(!get_wan_bridge())
         MeshError("get_wan_bridge failed\n");
 #endif
@@ -2683,7 +2757,7 @@ rbusError_t meshRbusInit()
         rc = RBUS_ERROR_NOT_INITIALIZED;
         return rc;
     }
-#ifdef WAN_FAILOVER_SUPPORTED
+#if defined(WAN_FAILOVER_SUPPORTED)
     // Register data elements
     rc = rbus_regDataElements(handle, NUM_OF_RBUS_PARAMS, meshRbusDataElements);
 
@@ -2769,7 +2843,7 @@ bool subscribeSpeedTestStatus()
    return ret;
 }
 
-#ifdef ONEWIFI
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
 int getRbusStaIfName(unsigned int index)
 {
     rbusValue_t value;
@@ -2791,7 +2865,64 @@ int getRbusStaIfName(unsigned int index)
 
     return ret;
 }
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+void *uplinkHandleFunction()
+{
+    char local_ip[MAX_IP_LEN];
+    char remote_ip[MAX_IP_LEN];
+    int rc =-1;
 
+    is_uplink_tid_exist = 1;
+    udhcpc_stop(GATEWAY_FAILOVER_BRIDGE);
+    handle_uplink_bridge(NULL, NULL, NULL, false);
+    //Stop the mesh and create a temporary uplink GRE
+    MeshInfo("Stopping meshwifi service\n");
+    // If the service is running, stop it
+    if ((svcagt_get_service_state(meshServiceName) || g_pMeshAgent->meshEnable))
+    {
+        if(svcagt_set_service_state(meshServiceName, false))
+        {
+            MeshWarning("%s Failed to stop\n",meshServiceName);
+        }
+    }
+    else
+    {
+        MeshWarning("%s Is not running\n",meshServiceName);
+    }
+    //Start udhcpc for connected interface
+    if(!udhcpc_start(mesh_sta_ifname))
+    {
+        MeshWarning("Failed to start udhcpc for %s\n",mesh_sta_ifname);
+    }
+
+    if (get_ipaddr_subnet(mesh_sta_ifname, local_ip, remote_ip))
+    {
+        if(!handle_uplink_bridge(mesh_sta_ifname, local_ip, remote_ip, true))
+        {
+            if(udhcpc_start(GATEWAY_FAILOVER_BRIDGE))
+	    {
+                if (get_ipaddr_subnet(GATEWAY_FAILOVER_BRIDGE, local_ip, remote_ip))
+                {
+                    rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)GATEWAY_FAILOVER_BRIDGE,MESH_TYPE_STRING);
+                    if(rc == RBUS_ERROR_SUCCESS)
+                    {
+                        MeshInfo("Published MeshWANLink.Interface.Name status value\n");
+                    }
+		    snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", GATEWAY_FAILOVER_BRIDGE);
+		}
+            }
+	}
+    }
+    else
+    {
+        MeshWarning("Ip is not configured for %s, So uplink GRE is not created\n",mesh_sta_ifname);
+    }
+    udhcpc_stop(mesh_sta_ifname);
+    is_uplink_tid_exist = 0;
+
+    return NULL;
+}
+#endif
 int getRbusStaBssId(unsigned int index)
 {
     rbusValue_t value;
@@ -2806,25 +2937,30 @@ int getRbusStaBssId(unsigned int index)
         MeshError ("rbus_get failed for [%s] with error [%d]\n", name, rc);
         ret = false;
     }
-    
     newValue = rbusValue_GetString(value, NULL);
-    snprintf(mesh_sta_bssid, MAX_BSS_ID_STR, "%s", newValue); 
+    snprintf(mesh_sta_bssid, MAX_BSS_ID_STR, "%s", newValue);
     MeshInfo("Sta bssid: [%s]\n", mesh_sta_bssid);
 
     return ret;
 }
 
-void staConnStatusHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEventSubscription_t* subscription)
+void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEventSubscription_t* subscription)
 {
     (void)handle;
     (void)subscription;
-
+#if defined(ONEWIFI)
+    int len;
     bool conn_status;
     unsigned int index = 0;
-    int len = 0;
+    unsigned int sta_connect_status = 0;
     wifi_sta_conn_info_t connect_info;
     const unsigned char *temp_buff;
     MeshStaStatus_node * sta;
+#endif 
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
+    int new_device_mode;
+#endif 
+
     rbusValue_t value = rbusObject_GetValue(event->data, NULL );
     if(!value)
     {
@@ -2833,114 +2969,232 @@ void staConnStatusHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
     }
 
     MeshInfo("%s:%d Rbus event name=%s\n",__FUNCTION__, __LINE__, event->name);
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
+    int err;
+    int rc =-1;
 
-    sscanf(event->name, RBUS_STA_STATUS_INDEX, &index);
-    temp_buff = rbusValue_GetBytes(value, &len);
-    if (temp_buff == NULL) {
-        MeshError("%s:%d Rbus get string failure len=%d\n", __FUNCTION__, __LINE__, len);
-        return;
+    if (strcmp(event->name,RBUS_DEVICE_MODE) == 0)
+    {
+        //Handle device mode
+        new_device_mode = rbusValue_GetUInt32(value);
+        MeshInfo("New Device Mode = %d, Old Device Mode = %d",new_device_mode,device_mode);
+	if (new_device_mode == GATEWAY_MODE)
+            snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
+	else
+            snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_XLE_BRIDGE);
+
+        rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname,MESH_TYPE_STRING);
+        if(rc == RBUS_ERROR_SUCCESS)
+        {
+            MeshInfo("Published MeshWANLink.Interface.Name status value %s\n",mesh_backhaul_ifname);
+        }
+        if(new_device_mode != device_mode)
+        {
+            device_mode = new_device_mode;
+            //restart mesh
+            MeshInfo("Restart Mesh");
+            if ((err = svcagt_set_service_restart (meshServiceName)) != 0)
+                MeshInfo("Restart Mesh failed");
+        }
     }
+    else
+#endif
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+    int err;
+    int rc =-1;
+    bool is_gateway_present = false;
 
-    memcpy(&connect_info, temp_buff, len);
-    conn_status = (connect_info.connect_status == wifi_connection_status_connected) ? true:false;
-    snprintf(mesh_sta_bssid, MAX_BSS_ID_STR, "%x:%x:%x:%x:%x:%x", connect_info.bssid[0], \
+    if (strcmp(event->name,RBUS_GATEWAY_PRESENT) == 0)
+    {
+        //Handle External Gateway Present
+        is_gateway_present = rbusValue_GetBoolean(value);
+        gateway_present = is_gateway_present?1:0;
+        MeshInfo("ExternalGatewayPresent  = %d",gateway_present);
+	if(gateway_present == AP_ACTIVE)
+	{
+            handle_uplink_bridge(NULL, NULL, NULL, false);
+	    udhcpc_stop(mesh_sta_ifname);
+            udhcpc_stop(GATEWAY_FAILOVER_BRIDGE);
+	    rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE,MESH_TYPE_STRING);
+            if(rc == RBUS_ERROR_SUCCESS)
+            {
+               MeshInfo("Published MeshWANLink.Interface.Name status value\n");
+            }
+	    snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
+
+	    if (g_pMeshAgent->meshEnable)
+            {
+	        if ((err = svcagt_set_service_state(meshServiceName, true)) != 0)
+                    MeshWarning("Start Mesh failed");
+	    }
+	    else
+	        MeshWarning("Mesh is disabled");
+	}
+    }
+    else
+#endif
+#if defined(ONEWIFI) 
+    if (strstr(event->name,"Connection.Status"))
+    {
+        //Handle sta connection status
+	sscanf(event->name, RBUS_STA_STATUS_INDEX, &index);
+        temp_buff = rbusValue_GetBytes(value, &len);
+        if (temp_buff == NULL) {
+            MeshError("%s:%d Rbus get string failure len=%d\n", __FUNCTION__, __LINE__, len);
+            return;
+        }
+
+        memcpy(&connect_info, temp_buff, len);
+        conn_status = (connect_info.connect_status == wifi_connection_status_connected) ? true:false;
+        snprintf(mesh_sta_bssid, MAX_BSS_ID_STR, "%02x:%02x:%02x:%02x:%02x:%02x", connect_info.bssid[0], \
              connect_info.bssid[1],connect_info.bssid[2],connect_info.bssid[3],connect_info.bssid[4], \
              connect_info.bssid[5]);
-    MeshInfo("%s:Connected Bssid:%s\n",__FUNCTION__,mesh_sta_bssid);
-    getRbusStaIfName(index);
-
-    if (conn_status == true) {
-        MeshInfo("%s:%d: Station successfully connected with external AP radio:%d\r\n",
-                    __func__, __LINE__, index - 1);
-        sta =  searchStaByIfname(mesh_sta_ifname);
-        if (!sta)
+        MeshInfo("%s:Connected Bssid:%s\n",__FUNCTION__,mesh_sta_bssid);
+        getRbusStaIfName(index);
+	//Station mode & uplink GRE support in the main gateway
+        sta_connect_status = conn_status?1:0;
+	MeshInfo("sta_connect_status = %d",sta_connect_status);
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+	if ((gateway_present == STA_ACTIVE))
         {
-            MeshInfo("%s:%d Sta not present so adding\n",__FUNCTION__, __LINE__);
-            sta = addSta(index-1,true);
-            Mesh_sendStaInterface(sta->sta_ifname,sta->bssid,true);
+            if(sta_connect_status)
+	        pthread_create(&tid_handle, NULL, uplinkHandleFunction,NULL);
+	    else
+	    {
+		if(is_uplink_tid_exist)
+		{
+		    MeshInfo("Stop the thread, still running, clear all bridges\n");
+		    if (pthread_kill( tid_handle, SIGUSR1) < 0)
+                        MeshInfo("pthread_kill failed");
+
+                    handle_uplink_bridge(NULL, NULL, NULL, false);
+		    is_uplink_tid_exist = 0;
+		}
+	    }
         }
         else
-        {
-            if(!sta->state)
-	    {
-                MeshInfo("%s:%d Sta already exist so change the state \n",__FUNCTION__, __LINE__);
-                Mesh_sendStaInterface(sta->sta_ifname,sta->bssid,true);
-                sta->state = true;
+	{
+#endif
+            if (conn_status == true) {
+                MeshInfo("%s:%d: Station successfully connected with external AP radio:%d\r\n",
+                        __func__, __LINE__, index - 1);
+                sta =  searchStaByIfname(mesh_sta_ifname);
+                if (!sta)
+                {
+                    MeshInfo("%s:%d Sta not present so adding\n",__FUNCTION__, __LINE__);
+                    sta = addSta(index-1,true);
+                    Mesh_sendStaInterface(sta->sta_ifname,sta->bssid,true);
+                }
+                else
+                {
+                    if(!sta->state)
+                    {
+                        MeshInfo("%s:%d Sta already exist so change the state \n",__FUNCTION__, __LINE__);
+                        Mesh_sendStaInterface(sta->sta_ifname,sta->bssid,true);
+                        sta->state = true;
+                    }
+                }
             }
-        }
-    } 
-    else {
-        MeshError("%s:%d: Disconnected with external AP:%d radio:%d\r\n",
-                __func__, __LINE__, conn_status, index - 1);
-        sta =  searchStaByIfname(mesh_sta_ifname);
-        if(sta)
-        {
-            if (sta->state)
-            {
-                Mesh_sendStaInterface(sta->sta_ifname,sta->bssid, false);
-                sta->state = false;
+            else {
+                MeshError("%s:%d: Disconnected with external AP:%d radio:%d\r\n",
+                        __func__, __LINE__, conn_status, index - 1);
+                sta =  searchStaByIfname(mesh_sta_ifname);
+                if(sta)
+                {
+                    if (sta->state)
+                    {
+                        Mesh_sendStaInterface(sta->sta_ifname,sta->bssid, false);
+                        sta->state = false;
+                    }
+                    memset(mesh_sta_ifname, 0, MAX_IFNAME_LEN);
+                }
             }
-            memset(mesh_sta_ifname, 0, MAX_IFNAME_LEN);
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
         }
+#endif
     }
-
-    return;
+#endif
+#if defined(ONEWIFI) 
+    else
+#endif
+        MeshError("Undefined event name\n");
 }
 
-void deviceModeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEventSubscription_t* subscription)
+void  *handle_rbus_Subscribe()
 {
-    (void)handle;
-    (void)subscription;
-    int err = 0;
-    int new_device_mode;
+    int i = (MESH_RBUS_EVENT_TOTAL-1);
+    bool ret = false;
+    int count = 0;
 
-    rbusValue_t value = rbusObject_GetValue(event->data, NULL );
-    if(!value)
+    while (count != (MESH_RBUS_EVENT_TOTAL))
     {
-        MeshError("%s:%d FAIL: value is NULL\n",__FUNCTION__, __LINE__);
+	if(!meshRbusEvent[i].status)
+        {
+            ret = rbusEvent_Subscribe(handle, meshRbusEvent[i].name, rbusSubscribeHandler, NULL, 0);
+	    if (ret != RBUS_ERROR_SUCCESS)
+            {
+                MeshError("Rbus events subscribe failed:%s\n",meshRbusEvent[i].name);
+		sleep(2);
+	    }
+            else
+            {
+		//MeshInfo("Rbus events subscribe sucess:%s count = %d\n",meshRbusEvent[i].name,count);
+                count++;
+                meshRbusEvent[i].status = true;
+            }
+	}
+	i = (i-- < 0)?(MESH_RBUS_EVENT_TOTAL-1):i;
+    }
+    MeshInfo("handle_rbus_Subscribe thread exited");
+    return NULL;
+}
+#endif
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+void rbus_get_gw_present()  
+{
+    rbusValue_t value;
+    unsigned int data;
+    MeshStaStatus_node *sta = NULL;
+    int rc = RBUS_ERROR_SUCCESS;
+
+    rc = rbus_get(handle,RBUS_GATEWAY_PRESENT, &value);
+
+    if(rc != RBUS_ERROR_SUCCESS) {
+        MeshInfo("gateway present rbus get failed");
+	rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE,MESH_TYPE_STRING);
+        if(rc == RBUS_ERROR_SUCCESS)
+        {
+            MeshInfo("Published Device.X_RDK_MeshAgent.MeshBackHaul.Ifname status value %s\n",MESH_BHAUL_BRIDGE);
+        }
+	snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
         return;
     }
 
-    MeshInfo("%s:%d Rbus event name=%s\n",__FUNCTION__, __LINE__, event->name);
+    data = rbusValue_GetBoolean(value);
+    gateway_present = data?1:0;
 
-    new_device_mode = rbusValue_GetUInt32(value);
-    MeshInfo("New Device Mode = %d, Old Device Mode = %d",new_device_mode,device_mode);
-    if(new_device_mode != device_mode)
+    MeshInfo("rbus_get for %s: value:%s\n",RBUS_GATEWAY_PRESENT, (data?"STA_ACTIVE":"AP_ACTIVE"));
+    if(gateway_present == STA_ACTIVE)
     {
-        //restart mesh
-	MeshInfo("Restart Mesh");
-        if ((err = svcagt_set_service_restart (meshServiceName)) != 0)
-            MeshInfo("Restart Mesh failed");
-        device_mode = new_device_mode;
+        sta =  searchStaActive();
+        if (sta)
+        {
+            MeshInfo(("STA is associated and gateway_present == STA_ACTIVE, create brSTA\n"));
+	    pthread_create(&tid_handle, NULL, uplinkHandleFunction,NULL);
+        }
+    }
+    else
+    {
+        rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE,MESH_TYPE_STRING);
+        if(rc == RBUS_ERROR_SUCCESS)
+        {
+            MeshInfo("Published Device.X_RDK_MeshAgent.MeshBackHaul.Ifname status value %s\n",MESH_BHAUL_BRIDGE);
+        }
+        snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
     }
 }
-
-bool subscribeStaConnectionStatus()
-{
-    bool ret = true;
-
-    MeshInfo("Rbus events subscription start %s\n",RBUS_STA_STATUS);
-    ret = rbusEvent_Subscribe(handle, RBUS_STA_STATUS, staConnStatusHandler, NULL, 0);
-    if (ret != RBUS_ERROR_SUCCESS) {
-        MeshError("Rbus events subscribe failed:%s\n",RBUS_STA_STATUS);
-        ret = false;
-    }
-   return ret;
-}
-
-bool subscribeDeviceMode()
-{
-    bool ret = true;
-
-    MeshInfo("Rbus events subscription start %s\n",RBUS_DEVICE_MODE);
-    ret = rbusEvent_Subscribe(handle, RBUS_DEVICE_MODE, deviceModeHandler, NULL, 0);
-    if (ret != RBUS_ERROR_SUCCESS) {
-        MeshError("Rbus events subscribe failed:%s\n",RBUS_DEVICE_MODE);
-        ret = false;
-    }
-   return ret;
-}
-
+#endif
+#ifdef ONEWIFI
 int get_sta_active_interface_name()
 {
     int rc = RBUS_ERROR_SUCCESS;
@@ -2959,11 +3213,6 @@ int get_sta_active_interface_name()
 
     pInputParam[numOfInputParams] = first_arg;
     numOfInputParams = 1;
-
-    if (numOfInputParams == 0) {
-        MeshInfo("%s:%d: numOfInputParams = %d\r\n", __func__, __LINE__, numOfInputParams);
-        return -1;
-    }
 
     rc = rbus_getExt(handle, numOfInputParams, pInputParam, &numOfOutVals, &outputVals);
     if(RBUS_ERROR_SUCCESS == rc) {
@@ -2990,7 +3239,9 @@ int get_sta_active_interface_name()
                     if (!sta){
                         sta = addSta(index-1,true);
                         MeshInfo("Sta is connected to %s  when mesh starts\n",sta->sta_ifname );
-                        Mesh_sendStaInterface(sta->sta_ifname,sta->bssid,true);
+#if defined (RDKB_EXTENDER_ENABLED) 
+			Mesh_sendStaInterface(sta->sta_ifname,sta->bssid,true);
+#endif
                     }
                     else{
                         MeshInfo("%s:%d: Sta interface is already there in list %s\r\n",__func__, __LINE__,sta->sta_ifname);
@@ -3299,7 +3550,13 @@ void* handleMeshEnable(void *Args)
         int error = MB_OK;
         int err = 0;
         unsigned char bit_mask = (UCHAR) ( (intptr_t)Args); 
-
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+	if(is_uplink_tid_exist)
+	{
+            MeshInfo("handleMeshEnable is skipped due to is_uplink_tid_exist enable\n");
+	    return NULL;
+        }
+#endif
         pthread_mutex_lock(&mesh_handler_mutex);
         enable = (bit_mask & 0x02) ? TRUE : FALSE;
         if (bit_mask & 0x01)
@@ -3491,7 +3748,7 @@ static BOOL is_DCS_enabled(void)
 #endif
 
 /**
- * Prash: This is a last option if all syscfg and retrial fails
+ * This is a last option if all syscfg and retrial fails
  *
  */
 static void Mesh_Recovery(void)
@@ -3993,7 +4250,7 @@ static void Mesh_sendReducedRetry(bool value)
     msgQSend(&mMsg);
 }
 
-#if defined(ONEWIFI)
+#if defined(ONEWIFI) 
 /**
  * @brief Mesh Agent send sta interface name to plume managers
  *
@@ -4091,7 +4348,7 @@ static void Mesh_sendDhcpLeaseSync(void)
     MeshInfo("Sending Mesh sync lease notification to plume agent\n");
     mMsg.msgType = MESH_DHCP_RESYNC_LEASES;
     msgQSend(&mMsg);
-    //Prash: umask the MSB so that , we can go ahead sending dnsmasq lease notifications
+    //umask the MSB so that , we can go ahead sending dnsmasq lease notifications
     clientSocketsMask &= ~(1 << MAX_CONNECTED_CLIENTS);
 #endif
 }
@@ -4325,8 +4582,12 @@ static void *Mesh_sysevent_handler(void *data)
                      else
                          MeshInfo("received notification event %s\n", name);
                          // Need to restart the meshwifi service if it is currently running.
-                         if (g_pMeshAgent->meshEnable || svcagt_get_service_state(meshServiceName))
+                         if ((g_pMeshAgent->meshEnable || svcagt_get_service_state(meshServiceName)))
                          {
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+		             if(!is_uplink_tid_exist)
+                             {
+#endif
                               MeshSync mMsg = {0};
 
                               // Set sync message type
@@ -4362,6 +4623,9 @@ static void *Mesh_sysevent_handler(void *data)
                                             MeshWarning("Unsupported option %s \n", val);
                                   }
                                }
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+			       }
+#endif
                             }
                             else {
                                    MeshInfo("meshwifi.service is not running - not restarting\n");
@@ -4806,8 +5070,7 @@ static void *Mesh_sysevent_handler(void *data)
 #ifdef ONEWIFI
             else if (ret_val == MESH_WIFI_EXTENDER_MODE)
             {
-                MeshError("Received MESH_WIFI_EXTENDER_MODE Notification\n");
-                if ( val[0] != '\0')
+		if ( val[0] != '\0')
                 {
                     const char delim[2] = "|";
                     char *token;
@@ -4879,33 +5142,6 @@ static void *Mesh_sysevent_handler(void *data)
                         msgQSend(&mMsg);
                     }
                 }
-#if 0
-		if ( val[0] != '\0')
-                {
-                    MeshSync mMsg = {0};
-
-                    // Set sync message type
-                    mMsg.msgType = MESH_WIFI_EXTENDER_MODE;
-                    rc = strcpy_s(mMsg.data.onewifiXLEExtenderMode.InterfaceName,
-                        sizeof(mMsg.data.onewifiXLEExtenderMode.InterfaceName), mesh_sta_ifname);
-                    if(rc != EOK)
-                    {
-                            ERR_CHK(rc);
-                            MeshError("Error in copying Interface name\n");
-                    }
-		    rc = strcpy_s(mMsg.data.onewifiXLEExtenderMode.bssid,
-                        sizeof(mMsg.data.onewifiXLEExtenderMode.bssid), val);
-                    if(rc != EOK)
-                    {
-                            ERR_CHK(rc);
-                            MeshError("Error in copying Interface name\n");
-                    }
-
-                    MeshInfo("Received MESH_WIFI_EXTENDER_MODE msgQsend Interface:%s\n",
-                        mMsg.data.onewifiXLEExtenderMode.InterfaceName);
-                    msgQSend(&mMsg);
-                }
-#endif
             }
 #endif
             else if (ret_val == MESH_WIFI_AP_SECURITY)
@@ -5834,6 +6070,9 @@ static void Mesh_InitClientList(void)
 static int Mesh_Init(ANSC_HANDLE hThisObject)
 {
     int status = 0;
+#if defined(ONEWIFI)
+    pthread_t tid_sub;
+#endif
     int thread_status = 0;
     char thread_name[THREAD_NAME_LEN] = { 0 };
     errno_t rc = -1;
@@ -5945,12 +6184,51 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     meshRbusInit();
 #ifdef ONEWIFI
     get_sta_active_interface_name();
-    subscribeStaConnectionStatus();
-    subscribeDeviceMode();
+#if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
+    rbus_get_gw_present();
+#endif
+    thread_status = 0;
+    thread_status = pthread_create(&tid_sub, NULL, handle_rbus_Subscribe,NULL);
+    if (thread_status == 0)
+    {
+        MeshInfo("rbus_Subscribe thread created successfully\n");
+	rc = strcpy_s(thread_name, sizeof(thread_name), "rbus_Subscribe");
+	if(rc != EOK)
+	{
+	    ERR_CHK(rc);
+            MeshError("Error in setting rbus_Subscribe thread_name\n");
+            return -1;
+        }
+	if (pthread_setname_np(tid_sub, thread_name) == 0)
+        {
+            MeshInfo("rbus_Subscribe thread name %s set successfully\n", thread_name);
+        }
+        else
+        {
+            MeshError("%s error occurred while setting rbus_Subscribe thread name\n", strerror(errno));
+        }
+    }
+    else
+    {
+        MeshError("%s error occurred while creating rbus_Subscribe thread\n", strerror(errno));
+        status = -1;
+    }
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     device_mode = Mesh_SysCfgGetInt("Device_Mode");
+    if (device_mode == GATEWAY_MODE)
+        snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
+    else
+        snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_XLE_BRIDGE);
+
+    rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname,MESH_TYPE_STRING);
+    if(rc == RBUS_ERROR_SUCCESS)
+    {
+        MeshInfo("Published MeshWANLink.Interface.Name status value %s\n",mesh_backhaul_ifname);
+    }
     MeshInfo("Current device mode = %d\n",device_mode);
 #endif
     subscribeSpeedTestStatus();
+#endif
     // MeshInfo("Exiting from %s\n",__FUNCTION__);
     return status;
 }
