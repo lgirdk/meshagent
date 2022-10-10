@@ -43,8 +43,6 @@ extern unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
 extern int sysevent_fd_gs;
 extern token_t sysevent_token_gs;
 
-const char *svcagt_systemctl_cmd = "systemctl";
-
 /**************************************************************************/
 /*! \fn static STATUS Mesh_SyseventGetInt
  **************************************************************************
