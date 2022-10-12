@@ -96,6 +96,7 @@ const int MAX_MESSAGES=10;  // max number of messages the can be in the queue
 #endif
 
 #define ONEWIFI_ENABLED "/etc/onewifi_enabled"
+#define OPENVSWITCH_LOADED "/sys/module/openvswitch"
 #define MESH_ENABLED "/nvram/mesh_enabled"
 #define LOCAL_HOST   "127.0.0.1"
 #define POD_LINK_SCRIPT "/usr/ccsp/wifi/mesh_status.sh"
@@ -2979,7 +2980,8 @@ bool Mesh_SetGreAcc(bool enable, bool init, bool commitSyscfg)
         MeshInfo("%s: GRE Acc Commit:%d, Enable:%d\n",
             __FUNCTION__, commitSyscfg, enable);
         if (enable && (!Mesh_GetEnabled(meshSyncMsgArr[MESH_WIFI_ENABLE].sysStr) ||
-            oneWifiEnabled || Mesh_GetEnabled("mesh_ovs_enable")))
+            oneWifiEnabled || Mesh_GetEnabled("mesh_ovs_enable") ||
+            0 == access( OPENVSWITCH_LOADED, F_OK )))
         {   // mesh_ovs_enable has higher priority over mesh_gre_acc_enable,
             // therefore when ovs is enabled, disable gre acc.
             MeshWarning("Disabling GreAcc RFC, since OVS is currently enabled!\n");
