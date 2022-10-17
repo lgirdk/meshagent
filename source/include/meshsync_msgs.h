@@ -105,6 +105,7 @@ typedef enum {
     MESH_REDUCED_RETRY,
     MESH_WIFI_SSID_CHANGED,
     MESH_WIFI_RADIO_OPERATING_STD,
+    MESH_SYNC_SM_PAUSE,
 #if defined(ONEWIFI)
     MESH_WIFI_EXTENDER_MODE,
     MESH_ADD_DNSMASQ,
@@ -428,6 +429,15 @@ typedef struct _MeshWifiRadioChannelBw {
     int index;
     int bw;
 } MeshWifiRadioChannelBw;
+
+/**
+ * Speedtest Event Notification
+ */
+typedef struct _MeshSyncSMPause {
+    int status;
+    int timeout;
+} MeshSyncSMPause;
+
 #ifdef ONEWIFI
 /**
  * br-home IP assigned notification
@@ -482,6 +492,7 @@ typedef struct _MeshSync {
         MeshTunnelSet			tunnelSet; 
         MeshTunnelSetVlan		tunnelSetVlan;
         MeshReducedRetry                retryFlag;
+        MeshSyncSMPause                 speedtestCfg;
 #ifdef WAN_FAILOVER_SUPPORTED
         MeshNetworkType                 networkType;
 #endif

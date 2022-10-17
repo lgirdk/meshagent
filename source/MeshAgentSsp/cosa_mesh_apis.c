@@ -41,9 +41,7 @@
 #include <syscfg/syscfg.h>
 #include <sysevent/sysevent.h>
 #include <fcntl.h>
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI)
 #include <rbus.h>
-#endif
 #ifdef WAN_FAILOVER_SUPPORTED
 #include "ccsp_psm_helper.h"
 #endif
@@ -143,11 +141,17 @@ pthread_mutex_t mesh_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED)
 extern char g_Subsystem[32];
-rbusHandle_t handle;
 #define      RBUS_DEVICE_MODE        "Device.X_RDKCENTRAL-COM_DeviceControl.DeviceNetworkingMode"
 #define      RBUS_STA_STATUS         "Device.WiFi.STA.*.Connection.Status"
 #define      RBUS_STA_STATUS_INDEX   "Device.WiFi.STA.%d.Connection.Status"
 #endif
+
+rbusHandle_t handle;
+#define      RBUS_SPEEDTEST_STATUS   "Device.IP.Diagnostics.X_RDKCENTRAL-COM_SpeedTest.Status"
+#define      RBUS_SPEEDTEST_TIMEOUT  "Device.IP.Diagnostics.X_RDK_SpeedTest.SubscriberUnPauseTimeOut"
+#define      ST_TR181_STATUS_STARTING 1
+#define      ST_TR181_STATUS_COMPLETE 5
+
 #ifdef WAN_FAILOVER_SUPPORTED
 static bool meshWANStatus = false;
 static char *meshWANIfname = NULL;
@@ -244,7 +248,8 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_TUNNEL_SET_VLAN,                  "MESH_TUNNEL_SET_VLAN",                 "tunnel_vlan"},
     {MESH_REDUCED_RETRY,                    "MESH_REDUCED_RETRY",                   "mesh_conn_opt_retry"},
     {MESH_WIFI_SSID_CHANGED,                "MESH_WIFI_SSID_CHANGED",               "wifi_SSIDChanged"},
-    {MESH_WIFI_RADIO_OPERATING_STD,         "MESH_WIFI_RADIO_OPERATING_STD",        "wifi_RadioOperatingStd"}
+    {MESH_WIFI_RADIO_OPERATING_STD,         "MESH_WIFI_RADIO_OPERATING_STD",        "wifi_RadioOperatingStd"},
+    {MESH_SYNC_SM_PAUSE,                    "MESH_SYNC_SM_PAUSE",                   "mesh_sm_pause"}
 #ifdef ONEWIFI
     ,
     {MESH_WIFI_EXTENDER_MODE,               "MESH_WIFI_EXTENDER_MODE",              "onewifi_XLE_Extender_mode"},
@@ -2638,6 +2643,7 @@ MeshStaStatus_node * searchStaActive()
     return NULL;
 }
 #endif
+#endif
 
 /**
  * @brief Mesh meshRbusInit
@@ -2671,7 +2677,78 @@ rbusError_t meshRbusInit()
 #endif
     return rc;
 }
-#endif
+
+int getSpeedTestTimeout()
+{
+    char const* name = RBUS_SPEEDTEST_TIMEOUT;
+    rbusValue_t value;
+    int rc = RBUS_ERROR_SUCCESS;
+    int speedtest_timeout;
+    rc = rbus_get(handle, name, &value);
+
+    if(rc != RBUS_ERROR_SUCCESS)
+    {
+        MeshError("%s: %d rbus_get failed for %s with error %d\n", __func__, __LINE__,  name, rc);
+        return -1;
+    }
+    speedtest_timeout = rbusValue_GetUInt32(value);
+    MeshInfo("%s: Speedtest timeout: %d\n", __func__, speedtest_timeout);
+    return speedtest_timeout;
+}
+
+void Mesh_sendSpeedtestMsg(int status, int speedtest_timeout)
+{
+    MeshSync mMsg = {0};
+
+    // Set sync message type
+    mMsg.msgType = MESH_SYNC_SM_PAUSE;
+    mMsg.data.speedtestCfg.status = status;
+    mMsg.data.speedtestCfg.timeout = speedtest_timeout;
+    if(status == ST_TR181_STATUS_STARTING || status == ST_TR181_STATUS_COMPLETE)
+    {
+        MeshInfo("MESH_SYNC_SM_PAUSE msgQsend Status:%d Timeout:%d\n",
+                        mMsg.data.speedtestCfg.status, mMsg.data.speedtestCfg.timeout);
+        msgQSend(&mMsg);
+    }
+}
+
+void speedTestHandler(rbusHandle_t handle, rbusEvent_t const* event,
+                                           rbusEventSubscription_t* subscription)
+{
+    (void)handle;
+    (void)subscription;
+    int speedtest_status;
+    int speedtest_timeout;
+
+    rbusValue_t value = rbusObject_GetValue(event->data, NULL );
+    if(!value)
+    {
+        MeshError("%s:%d FAIL: value is NULL\n",__FUNCTION__, __LINE__);
+        return;
+    }
+
+    speedtest_status = rbusValue_GetUInt32(value);
+    MeshInfo("Received SpeedTest Status event %d\n", speedtest_status);
+
+    speedtest_timeout = getSpeedTestTimeout();
+    if (speedtest_timeout >= 0)
+    {
+        Mesh_sendSpeedtestMsg(speedtest_status, speedtest_timeout);
+    }
+}
+
+bool subscribeSpeedTestStatus()
+{
+    bool ret = true;
+
+    MeshInfo("Rbus events subscription start %s\n", RBUS_SPEEDTEST_STATUS);
+    ret = rbusEvent_Subscribe(handle, RBUS_SPEEDTEST_STATUS, speedTestHandler, NULL, 0);
+    if (ret != RBUS_ERROR_SUCCESS) {
+        MeshError("Rbus events subscribe failed:%s\n", RBUS_SPEEDTEST_STATUS);
+        ret = false;
+    }
+   return ret;
+}
 
 #ifdef ONEWIFI
 int getRbusStaIfName(unsigned int index)
@@ -5824,9 +5901,7 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     // Start message queue client thread (Communications to/from RDKB CcspWifiSsp)
 
     parodusInit();
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI)
     meshRbusInit();
-#endif
 #ifdef ONEWIFI
     get_sta_active_interface_name();
     subscribeStaConnectionStatus();
@@ -5834,6 +5909,7 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     device_mode = Mesh_SysCfgGetInt("Device_Mode");
     MeshInfo("Current device mode = %d\n",device_mode);
 #endif
+    subscribeSpeedTestStatus();
     // MeshInfo("Exiting from %s\n",__FUNCTION__);
     return status;
 }
