@@ -190,6 +190,9 @@ static struct sockaddr_in dnsserverAddr;
 extern COSA_DATAMODEL_MESHAGENT* g_pMeshAgent;
 static bool oneWifiEnabled = false;
 
+bool g_offchanvalFound = false;
+bool g_offchanEnabled = false;
+
 // Mesh Status structure
 typedef struct
 {
@@ -249,7 +252,8 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_REDUCED_RETRY,                    "MESH_REDUCED_RETRY",                   "mesh_conn_opt_retry"},
     {MESH_WIFI_SSID_CHANGED,                "MESH_WIFI_SSID_CHANGED",               "wifi_SSIDChanged"},
     {MESH_WIFI_RADIO_OPERATING_STD,         "MESH_WIFI_RADIO_OPERATING_STD",        "wifi_RadioOperatingStd"},
-    {MESH_SYNC_SM_PAUSE,                    "MESH_SYNC_SM_PAUSE",                   "mesh_sm_pause"}
+    {MESH_SYNC_SM_PAUSE,                    "MESH_SYNC_SM_PAUSE",                   "mesh_sm_pause"},
+    {MESH_WIFI_OFF_CHAN_ENABLE,             "MESH_WIFI_OFF_CHAN_ENABLE",            "wifi_OffChannelScanEnable"}
 #ifdef ONEWIFI
     ,
     {MESH_WIFI_EXTENDER_MODE,               "MESH_WIFI_EXTENDER_MODE",              "onewifi_XLE_Extender_mode"},
@@ -311,6 +315,21 @@ static char EthPodMacs[MAX_POD_COUNT][MAX_MAC_ADDR_LEN];
 static int eth_mac_count = 0;
 
 static ssize_t leaseServerRead(int fd, MeshNotify* notify, int timeout);
+
+static void off_chan_scan_status_set()
+{
+    MeshInfo("Sending off chan status to msgQ \n");
+    MeshSync mMsg = {0};
+    if (g_offchanvalFound)
+    {
+        g_offchanvalFound = false;
+        // Set sync message type
+        mMsg.msgType = MESH_WIFI_OFF_CHAN_ENABLE;
+        mMsg.data.wifiOffChannelScanEnable.enable = g_offchanEnabled;
+        msgQSend(&mMsg);
+    }
+    return;
+}
 
 static int Get_MeshSyncType(char * name ,eMeshSyncType *type_ptr)
 {
@@ -4225,6 +4244,8 @@ static void *Mesh_sysevent_handler(void *data)
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_SSID_NAME].sysStr,                 &wifi_ssidName_asyncid);
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_SSID_CHANGED].sysStr,              TUPLE_FLAG_EVENT);
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_SSID_CHANGED].sysStr,              &wifi_ssidChanged_asyncid);
+    sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_OFF_CHAN_ENABLE].sysStr,           TUPLE_FLAG_EVENT);
+    sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_OFF_CHAN_ENABLE].sysStr,           &wifi_ssidChanged_asyncid);
 #ifdef ONEWIFI
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_EXTENDER_MODE].sysStr,              TUPLE_FLAG_EVENT);
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_EXTENDER_MODE].sysStr,              &onewifi_xle_extender_mode_asyncid);
@@ -4761,6 +4782,26 @@ static void *Mesh_sysevent_handler(void *data)
                         msgQSend(&mMsg);
                     }
                 }
+            }
+            else if (ret_val == MESH_WIFI_OFF_CHAN_ENABLE)
+            {
+                MeshError("Received MESH_WIFI_OFF_CHAN_ENABLE Notification\n");
+                if ( val[0] != '\0')
+                {
+                     MeshInfo("off_channel_enable=%s\n", val);
+                     if (((rc = strcmp_s("true", strlen("true"), val, &ind)) == EOK) && (ind == 0))
+                     {
+                         g_offchanEnabled = true;
+                     }
+                     else if (((rc = strcmp_s("false", strlen("false"), val, &ind)) == EOK) && (ind == 0))
+                     {
+                         g_offchanEnabled = false;
+                     }
+                     ERR_CHK(rc);
+
+                     g_offchanvalFound = true;
+                }
+                off_chan_scan_status_set();
             }
 #ifdef ONEWIFI
             else if (ret_val == MESH_WIFI_EXTENDER_MODE)

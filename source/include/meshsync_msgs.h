@@ -106,6 +106,7 @@ typedef enum {
     MESH_WIFI_SSID_CHANGED,
     MESH_WIFI_RADIO_OPERATING_STD,
     MESH_SYNC_SM_PAUSE,
+    MESH_WIFI_OFF_CHAN_ENABLE,
 #if defined(ONEWIFI)
     MESH_WIFI_EXTENDER_MODE,
     MESH_ADD_DNSMASQ,
@@ -201,6 +202,10 @@ typedef struct _MeshWifiSSIDName {
     uint32_t  index;                    // index [0-15]
     char      ssid[MAX_SSID_LEN];       // SSID
 } MeshWifiSSIDName;
+
+typedef struct _MeshWifiOffChannelScanEnable {
+    uint8_t   enable;       //off chan scan bool val
+} MeshWifiOffChannelScanEnable;
 
 typedef struct _MeshWifiSSIDChanged {
     uint32_t  index;                    // index [0-15]
@@ -501,6 +506,7 @@ typedef struct _MeshSync {
         MeshBrhomeIp                    brhomeIP;
         MeshSta_dnsmasq_info            STADnsMasqInfo;
 #endif
+        MeshWifiOffChannelScanEnable    wifiOffChannelScanEnable;
     } data;
 } MeshSync;
 
