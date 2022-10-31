@@ -6229,8 +6229,8 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     }
     MeshInfo("Current device mode = %d\n",device_mode);
 #endif
-    subscribeSpeedTestStatus();
 #endif
+    subscribeSpeedTestStatus();
     // MeshInfo("Exiting from %s\n",__FUNCTION__);
     return status;
 }
