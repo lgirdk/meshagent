@@ -37,6 +37,7 @@
 #include "secure_wrapper.h"
 
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
+#define MAX_TIME_IN_SEC   60
 extern unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
 #endif
 extern int sysevent_fd_gs;
@@ -282,7 +283,7 @@ int nif_ioctl(int cmd, void *buf)
         fd = socket(AF_INET, SOCK_DGRAM, 0);
         if (fd < 0)
         {
-            MeshInfo("nif_ioctl: socket() failed.");
+            MeshInfo("nif_ioctl: socket() failed.\n");
             retval = errno;
             return retval;
         }
@@ -307,7 +308,7 @@ int nif_ifreq(int cmd, char *ifname, struct ifreq *req)
         ERR_CHK(rc);
         MeshError("Error in copying ifname\n");
     }
-    while (tries++ < 25)
+    while (tries++ < MAX_TIME_IN_SEC)
     {
         rc = nif_ioctl(cmd, req);
        if(rc == 0)
@@ -315,7 +316,7 @@ int nif_ifreq(int cmd, char *ifname, struct ifreq *req)
            break;
        }
        MeshError("cmd: %d, %s\n",cmd,strerror(errno));
-        usleep(500*1000);
+       sleep(1);
     }
     return rc;
 }
@@ -356,7 +357,7 @@ bool nif_ipaddr_get(char* ifname, os_ipaddr_t* addr)
     rc = nif_ifreq(SIOCGIFADDR, ifname, &req);
     if (rc != 0)
     {
-        MeshInfo("nif_ipaddr: SIOCGIFADDR failed.::ifname=%s", ifname);
+        MeshInfo("nif_ipaddr: SIOCGIFADDR failed.::ifname=%s\n", ifname);
         return false;
     }
 
@@ -379,7 +380,7 @@ bool nif_netmask_get(char* ifname, os_ipaddr_t* addr)
     rc = nif_ifreq(SIOCGIFNETMASK, ifname, &req);
     if (rc != 0)
     {
-        MeshInfo("nif_ipaddr:SIOCGIFNETMASK failed::ifname=%s", ifname);
+        MeshInfo("nif_ipaddr:SIOCGIFNETMASK failed::ifname=%s\n", ifname);
         return false;
     }
 
@@ -451,24 +452,24 @@ bool udhcpc_start(char* ifname)
 {
     char pidfile[256];
     pid_t pid;
-    //char  udhcpc_s_option[256];
+    char  udhcpc_s_option[256];
     int status;
 
-    MeshInfo("Mesh udhcpc_start....");
+    MeshInfo("Mesh udhcpc_start ifname=%s\n",ifname);
     pid = udhcpc_pid(ifname);
     if (pid > 0)
     {
-        MeshError("DHCP client already running::ifname=%s", ifname);
+        MeshError("DHCP client already running::ifname=%s\n", ifname);
         return true;
     }
 
     snprintf(pidfile, sizeof(pidfile), "/var/run/udhcpc-%s.pid", ifname);
-    //snprintf(udhcpc_s_option, sizeof(udhcpc_s_option), "/usr/opensync/scripts/udhcpc.sh");
+    snprintf(udhcpc_s_option, sizeof(udhcpc_s_option), "/usr/opensync/scripts/udhcpc.sh");
 
     char *argv_apply[] = {
        "/sbin/udhcpc",
        "-p", pidfile,
-       //"-s", udhcpc_s_option,
+       "-s", udhcpc_s_option,
        "-i", ifname,
        NULL
     };
@@ -478,7 +479,7 @@ bool udhcpc_start(char* ifname)
     {
         if (fork() == 0)
         {
-            MeshInfo("%s: %%s option \n", __func__);
+            MeshInfo("%s: option \n", __func__);
             execv("/sbin/udhcpc", argv_apply);
         }
         exit(0);
@@ -493,7 +494,7 @@ bool udhcpc_start(char* ifname)
 bool udhcpc_stop(char* ifname)
 {
     int pid = udhcpc_pid(ifname);
-    MeshInfo("udhcpc_stop is called %s", ifname);
+    MeshInfo("udhcpc_stop is called %s\n", ifname);
     if (pid <= 0)
     {
         MeshInfo("DHCP client not running::ifname=%s", ifname);
