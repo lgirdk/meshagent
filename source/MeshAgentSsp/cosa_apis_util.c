@@ -227,12 +227,14 @@ int svcagt_get_service_state (const char *svc_name)
 	int exit_code;
 	bool running;
 
+	MeshInfo("In svcagt_get_service_state\n");
         exit_code =v_secure_system ("systemctl is-active %s.service", svc_name);
 	if (exit_code == -1) {
 		CcspTraceError(("Error invoking systemctl command, errno: %s\n", strerror(errno)));
 		return -1;
 	}
 	running = (exit_code == 0);
+	MeshInfo("In svcagt_get_service_state before return\n");
 	return running;
 }
 

@@ -343,3 +343,17 @@ void freeResources_MeshBackhaul(void *arg)
         blob_exec_data = NULL ;
     }
 }
+
+/**
+ *  Function to calculate timeout value for executing the blob
+ *
+ *  @param numOfEntries Number of Entries of blob
+ *
+ * returns timeout value
+ */
+size_t webconf_Mesh_Timeout_Handler(size_t numOfEntries)
+{
+    MeshInfo("In webconf_Mesh_Timeout_Handler numOfEntried = %d\n", numOfEntries);
+    return MESH_DEFAULT_TIMEOUT;
+}
+

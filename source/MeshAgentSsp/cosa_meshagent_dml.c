@@ -1173,7 +1173,7 @@ MeshAgent_SetParamStringValue
 
                     strncpy(execDataMb->subdoc_name,"mesh",sizeof(execDataMb->subdoc_name)-1);
                     execDataMb->user_data = (void*) mb ;
-                    execDataMb->calcTimeout = NULL ;
+                    execDataMb->calcTimeout = webconf_Mesh_Timeout_Handler; ;
                     execDataMb->executeBlobRequest = Process_MB_WebConfigRequest;
                     execDataMb->rollbackFunc = rollback_MeshBackhaul ;
                     execDataMb->freeResources = freeResources_MeshBackhaul ;

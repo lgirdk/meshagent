@@ -35,6 +35,7 @@
 #define MESH_CACHE_SIZE 4
 #define BLOCK_SIZE 32
 #define VAL_BLOCK_SIZE 129 // for ipv6 address 128 + 1 size is needed
+#define MESH_DEFAULT_TIMEOUT 120
 
 #define MESH_ENABLE                  "mesh_enable"
 #define ETHERNET_BACKHAUL_ENABLE     "ethbhaul_enable"
@@ -76,4 +77,5 @@ void init_mb_cache(t_cache *tmp_mb_cache);
 pErr Process_MB_WebConfigRequest(void *Data);
 int rollback_MeshBackhaul() ;
 void freeResources_MeshBackhaul(void *arg);
+size_t webconf_Mesh_Timeout_Handler(size_t numOfEntries);
 #endif
