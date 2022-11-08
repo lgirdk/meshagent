@@ -40,6 +40,31 @@
 #define      MESH_BHAUL_BRIDGE        "br403"
 #define      MESH_XLE_BRIDGE          "br-home"
 
+#ifndef RDK_LED_MANAGER_EXIST
+typedef enum {
+    SOLID = 0,
+    BLINKING_SLOW,
+    BLINKING_FAST
+}eLedAnimation;
+typedef enum {
+    OFF = 0,
+    RED,
+    WHITE
+}eLedColor;
+
+typedef struct
+{
+    eLedColor color;           // Enum color
+    char         *color_str;   // color str string
+}LedColor_Msg;
+
+typedef struct
+{
+    eLedAnimation animation;       // Enum animation
+    char         *animation_str;   // animation_str string
+}LedAnimation_Msg;
+#endif
+
 typedef struct { unsigned char addr[MAX_IPV4_BYTES]; } os_ipaddr_t;
 
 bool Mesh_SetGreAcc(bool enable, bool init, bool commitSyscfg);
@@ -81,4 +106,10 @@ int handle_uplink_bridge(char *ifname, char * bridge_ip, char *pod_addr, bool cr
 bool udhcpc_stop(char* ifname);
 bool udhcpc_start(char* ifname);
 int udhcpc_pid(char *ifname);
+#ifndef RDK_LED_MANAGER_EXIST
+void  led_state(eLedColor color,eLedAnimation animation);
+#endif
+#if defined(ONEWIFI)
+void  handle_led_status(eMeshSyncStatus status);
+#endif
 #endif /* MESHAGENT_SOURCE_MESHAGENT_MESHUTILS_H_ */

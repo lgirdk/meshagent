@@ -306,6 +306,7 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_WIFI_OFF_CHAN_ENABLE,             "MESH_WIFI_OFF_CHAN_ENABLE",            "wifi_OffChannelScanEnable"}
 #ifdef ONEWIFI
     ,
+    {MESH_SYNC_STATUS,                      "MESH_SYNC_STATUS",                     "mesh_led_status"},
     {MESH_WIFI_EXTENDER_MODE,               "MESH_WIFI_EXTENDER_MODE",              "onewifi_XLE_Extender_mode"},
     {MESH_ADD_DNSMASQ,                      "MESH_ADD_DNSMASQ",                     "dhcp_conf_change"}
 #endif
@@ -918,6 +919,12 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_ADD_DNSMASQ].sysStr, cmd, 0, false);
         break;
     }
+    case MESH_SYNC_STATUS:
+    {
+        MeshInfo(("Received MESH_SYNC_STATUS sync message.\n"));
+        handle_led_status(rxMsg.data.syncStatus.status);
+    }
+    break;
 #endif
     // the rest of these messages will not come from the Mesh vendor
     case MESH_SUBNET_CHANGE:
@@ -3078,6 +3085,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 	{
 #endif
             if (conn_status == true) {
+                handle_led_status(MESH_STA_CONNECTED);
                 MeshInfo("%s:%d: Station successfully connected with external AP radio:%d\r\n",
                         __func__, __LINE__, index - 1);
                 sta =  searchStaByIfname(mesh_sta_ifname);
@@ -3097,7 +3105,8 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
                     }
                 }
             }
-            else {
+            else{
+                handle_led_status(MESH_STA_DISCONNECTED);
                 MeshError("%s:%d: Disconnected with external AP:%d radio:%d\r\n",
                         __func__, __LINE__, conn_status, index - 1);
                 sta =  searchStaByIfname(mesh_sta_ifname);
@@ -4258,7 +4267,8 @@ static void Mesh_sendReducedRetry(bool value)
     msgQSend(&mMsg);
 }
 
-#if defined(ONEWIFI) 
+#if defined(ONEWIFI)
+
 /**
  * @brief Mesh Agent send sta interface name to plume managers
  *

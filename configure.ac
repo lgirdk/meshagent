@@ -96,6 +96,20 @@ AC_ARG_ENABLE([rdkb_extender],
 
 AM_CONDITIONAL([FEATURE_RDKB_EXTENDER_ENABLED], [test $FEATURE_RDKB_EXTENDER_ENABLED = yes])
 
+FEATURE_RDK_LED_MANAGER_ENABLE=no
+AC_ARG_ENABLE([rdk_ledmanager],
+        AS_HELP_STRING([--enable-rdk_ledmanager],[enable rdk_ledmanager]),
+        [
+          case "${enableval}" in
+           yes) FEATURE_RDK_LED_MANAGER_ENABLE=yes ;;
+           no) AC_MSG_ERROR([rdk_ledmanager is disabled]) ;;
+          *) AC_MSG_ERROR([bad value ${enableval} for --enable-rdk_ledmanager ]) ;;
+           esac
+           ],
+         [echo "rdk_ledmanager is disabled."])
+
+AM_CONDITIONAL([FEATURE_RDK_LED_MANAGER_ENABLE], [test $FEATURE_RDK_LED_MANAGER_ENABLE = yes])
+
 AC_PREFIX_DEFAULT(`pwd`)
 AC_ENABLE_SHARED
 AC_DISABLE_STATIC

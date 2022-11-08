@@ -40,6 +40,28 @@
 #define MAX_TIME_IN_SEC   60
 extern unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
 #endif
+
+#if defined(ONEWIFI)
+extern MeshSync_MsgItem meshSyncMsgArr[];
+#ifndef RDK_LED_MANAGER_EXIST
+LedAnimation_Msg  meshLedAnimationArr[] = {
+    {SOLID,                            "SOLID"},
+    {BLINKING_SLOW,                    "BLINK_SLOW"},
+    {BLINKING_FAST,                    "BLINK_FAST"}
+};
+
+LedColor_Msg  meshLedColorArr[] = {
+    {OFF,                             "OFF"},
+    {RED,                             "RED"},
+    {WHITE,                           "WHITE"}
+};
+#endif
+
+#define CONTROLLER_CONNECTED          "2"
+#define CONTROLLER_CONNECTING         "3"
+#define CONTROLLER_CONNECT_FAILURE    "4"
+#define STA_DISCONNECTED              "19"
+#endif
 extern int sysevent_fd_gs;
 extern token_t sysevent_token_gs;
 
@@ -583,5 +605,84 @@ int handle_uplink_bridge(char *ifname, char * bridge_ip, char *pod_addr, bool cr
     }
     return 0;
 }
+#if defined(ONEWIFI)
+#ifndef RDK_LED_MANAGER_EXIST
+/**
+ * @brief Led animation
+ *
+ * This function will control the led animation
+ */
+void  led_state(eLedColor color,eLedAnimation animation)
+{
+    int rc = -1;
+
+    MeshInfo("Led Set led_control_script.sh  %s %s\n",  meshLedAnimationArr[animation].animation_str,meshLedColorArr[color].color_str);
+    rc = v_secure_system("led_control_script.sh %s %s",meshLedAnimationArr[animation].animation_str,meshLedColorArr[color].color_str);
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Led Status for /usr/sbin/led_control_script.sh  %s %s is failed,  return = %d\n",  meshLedAnimationArr[animation].animation_str,meshLedColorArr[color].color_str, WEXITSTATUS(rc));
+    }
+}
 #endif
+
+/**
+ * @brief Mesh Agent control led
+ *
+ * This function will control the led based on connection status
+ */
+void  handle_led_status(eMeshSyncStatus status)
+{
+    static bool ctr_status = false;
+    static eMeshSyncStatus current_status;
+
+    if (current_status == status)
+    {
+        MeshInfo("There is not change, state:%d\n", status);
+        return;
+    }
+
+    switch (status)
+    {
+        case MESH_CONTROLLER_CONNECTED:
+            ctr_status = true;
+            MeshInfo("Led Off, Controller connected\n");
+#ifndef RDK_LED_MANAGER_EXIST
+            led_state(OFF,SOLID);
+#endif
+            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECTED, 0, false);
+        break;
+        case MESH_CONTROLLER_CONNECTING:
+	    ctr_status = false;
+            MeshInfo("Led Blink White, Controller Connecting\n");
+#ifndef RDK_LED_MANAGER_EXIST
+            led_state(WHITE,BLINKING_SLOW);
+#endif
+            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECTING, 0, false);
+            break;
+        case MESH_CONTROLLER_FAILURE:
+	    ctr_status = false;
+            MeshInfo("Led Off, Connection Failure\n");
+#ifndef RDK_LED_MANAGER_EXIST
+            led_state(OFF,SOLID);
+#endif
+            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECT_FAILURE, 0, false);
+            break;
+        case MESH_STA_DISCONNECTED:
+            MeshInfo("Led Blink white, Sta Disconnect\n");
+#ifndef RDK_LED_MANAGER_EXIST
+            led_state(WHITE,BLINKING_SLOW);
+#endif
+            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,STA_DISCONNECTED, 0, false);
+            break;
+        case MESH_STA_CONNECTED:
+            if(ctr_status == true)
+                led_state(OFF,SOLID);
+            break;
+        default:
+            break;
+    }
+    current_status = status;
+}
+#endif // ONEWIFI
+#endif // WAN_FAILOVER_SUPPORTED || ONEWIFI || GATEWAY_FAILOVER_SUPPORTED
 #endif // _RDKB_MESH_UTILS_C_

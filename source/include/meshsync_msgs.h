@@ -108,6 +108,7 @@ typedef enum {
     MESH_SYNC_SM_PAUSE,
     MESH_WIFI_OFF_CHAN_ENABLE,
 #if defined(ONEWIFI)
+    MESH_SYNC_STATUS,
     MESH_WIFI_EXTENDER_MODE,
     MESH_ADD_DNSMASQ,
 #endif
@@ -450,9 +451,7 @@ typedef struct _MeshSyncSMPause {
 typedef struct _MeshBrhomeIp {
     char ip[16];
 } MeshBrhomeIp;
-#endif
 
-#if defined(ONEWIFI)
 typedef struct _MeshSta_dnsmasq_info
 {
     char ifname[MAX_IFNAME_LEN];
@@ -460,8 +459,21 @@ typedef struct _MeshSta_dnsmasq_info
     char dhcp_end[MAX_IP_LEN];
     int lease_time;
 }MeshSta_dnsmasq_info;
-#endif
 
+typedef enum {
+    MESH_CONTROLLER_CONNECTED = 0,
+    MESH_CONTROLLER_CONNECTING,
+    MESH_CONTROLLER_FAILURE,
+    MESH_STA_DISCONNECTED,
+    MESH_STA_CONNECTED,
+    MESH_TOTAL_STATUS
+}eMeshSyncStatus;
+
+typedef struct _MeshSync_status {
+    eMeshSyncStatus status;
+} MeshSync_status;
+
+#endif
 
 /**
  * Mesh Sync message
@@ -505,6 +517,7 @@ typedef struct _MeshSync {
         MeshGetSTAInfo                  staInfo;
         MeshBrhomeIp                    brhomeIP;
         MeshSta_dnsmasq_info            STADnsMasqInfo;
+        MeshSync_status                 syncStatus;
 #endif
         MeshWifiOffChannelScanEnable    wifiOffChannelScanEnable;
     } data;
