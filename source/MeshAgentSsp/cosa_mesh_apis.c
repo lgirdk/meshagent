@@ -2938,7 +2938,9 @@ int getRbusStaBssId(unsigned int index)
         ret = false;
     }
     newValue = rbusValue_GetString(value, NULL);
-    snprintf(mesh_sta_bssid, MAX_BSS_ID_STR, "%s", newValue);
+    snprintf(mesh_sta_bssid, MAX_BSS_ID_STR, "%02x:%02x:%02x:%02x:%02x:%02x", *newValue, \
+             *(newValue +1),*(newValue +2),*(newValue +3),*(newValue +4), \
+             *(newValue +5));
     MeshInfo("Sta bssid: [%s]\n", mesh_sta_bssid);
 
     return ret;
