@@ -353,7 +353,7 @@ void freeResources_MeshBackhaul(void *arg)
  */
 size_t webconf_Mesh_Timeout_Handler(size_t numOfEntries)
 {
-    MeshInfo("In webconf_Mesh_Timeout_Handler numOfEntried = %d\n", numOfEntries);
+    MeshInfo("In webconf_Mesh_Timeout_Handler numOfEntried = %lu\n", (long unsigned int) numOfEntries);
     return MESH_DEFAULT_TIMEOUT;
 }
 
