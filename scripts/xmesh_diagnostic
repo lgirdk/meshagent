@@ -86,6 +86,16 @@ echo "wl0 interface---"
 echo "`ifconfig wl0`"
 echo "wl0 status---"
 echo "`wl -i wl0 status`"
+
+echo "wl1 interface---"
+echo "`ifconfig wl1`"
+echo "wl1 status---"
+echo "`wl -i wl1 status`"
+
+echo "wl2 interface---"
+echo "`ifconfig wl2`"
+echo "wl2 status---"
+echo "`wl -i wl2 status`"
 dump_tables="Wifi_VIF_State Wifi_Inet_Config Wifi_Master_State Connection_Manager_Uplink AWLAN_Node Manager"
 for tab in $dump_tables;do
 echo "$tab ---"
@@ -102,8 +112,11 @@ if [ "`wl -i wl0 bssid`" != "" ]; then
  echo -e "\033[32mXLE is connected in 2.4GHz BHAUL BSSID: `wl -i wl0 bssid`\033[m"
  sta="wl0"
 elif [ "`wl -i wl1 bssid`" != "" ]; then
- echo -e "\033[32mXLE is connected in 5GHz BHAUL `wl -i wl0 bssid`\033[m"
+ echo -e "\033[32mXLE is connected in 5LGHz BHAUL `wl -i wl1 bssid`\033[m"
  sta="wl1"
+elif [ "`wl -i wl2 bssid`" != "" ]; then
+ echo -e "\033[32mXLE is connected in 5UGHz BHAUL `wl -i wl2 bssid`\033[m"
+ sta="wl2"
 else
  sta=""
 fi
