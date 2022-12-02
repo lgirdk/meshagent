@@ -677,7 +677,12 @@ void  handle_led_status(eMeshSyncStatus status)
             break;
         case MESH_STA_CONNECTED:
             if(ctr_status == true)
+            {
+#ifndef RDK_LED_MANAGER_EXIST
                 led_state(OFF,SOLID);
+#endif
+                Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECTED, 0, false);
+            }
             break;
         case MESH_MQTT_RECVD:
             MeshInfo("MQTT is recvd, turn of BLE\n");
