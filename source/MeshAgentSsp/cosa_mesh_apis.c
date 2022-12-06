@@ -2116,49 +2116,7 @@ get_wan_bridge()
 
 BOOL is_bridge_mode_enabled()
 {
-    ANSC_STATUS ret = ANSC_STATUS_FAILURE;
-    parameterValStruct_t    **valStructs = NULL;
-    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.pam";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/pam";
-    char *paramNames[]={"Device.X_CISCO_COM_DeviceControl.LanManagementEntry.1.LanMode"};
-    int  valNum = 0;
-    errno_t rc[2] = {-1, -1};
-    int ind[2] = {-1, -1};
-
-    ret = CcspBaseIf_getParameterValues(
-            bus_handle,
-            dstComponent,
-            dstPath,
-            paramNames,
-            1,
-            &valNum,
-            &valStructs);
-
-    if(CCSP_Message_Bus_OK != ret)
-    {
-         CcspTraceError(("%s CcspBaseIf_getParameterValues %s error %lu\n", __FUNCTION__,paramNames[0],ret));
-         free_parameterValStruct_t(bus_handle, valNum, valStructs);
-         return FALSE;
-    }
-
-    MeshWarning("valStructs[0]->parameterValue = %s\n",valStructs[0]->parameterValue);
-
-    rc[0] = strcmp_s("bridge-static",strlen("bridge-static"),valStructs[0]->parameterValue,&ind[0]);
-    ERR_CHK(rc[0]);
-    rc[1] = strcmp_s("full-bridge-static",strlen("full-bridge-static"),valStructs[0]->parameterValue,&ind[1]);
-    ERR_CHK(rc[1]);
-    if(((ind[0] == 0 ) && (rc[0] == EOK)) || ((ind[1] == 0) && (rc[1] == EOK)))
-    {
-         MeshError("Brigde mode enabled, setting mesh wifi to disabled \n");
-         free_parameterValStruct_t(bus_handle, valNum, valStructs);
-         return TRUE;
-    }
-    else
-    {
-        free_parameterValStruct_t(bus_handle, valNum, valStructs);
-        return FALSE;
-    }
-
+	return !(Mesh_SysCfgGetInt("bridge_mode") == 0);
 }
 
 #ifdef USE_PARTNER_ID
@@ -3230,7 +3188,7 @@ void* handleMeshEnable(void *Args)
 	 if (enable) {
             // This will only work if this service is started *AFTER* CcspWifi
             // If the service is not running, start it
-            if(!radio_check() || is_bridge_mode_enabled()) {
+            if(is_bridge_mode_enabled()) {
               MeshError("Mesh Pre-check conditions failed, setting mesh wifi to disabled \n");
               error =  MB_ERROR_PRECONDITION_FAILED;
               meshSetSyscfg(0, true);
