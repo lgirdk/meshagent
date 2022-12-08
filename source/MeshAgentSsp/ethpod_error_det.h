@@ -34,4 +34,6 @@ bool meshRemovePods();
 bool meshHandleEvent(const char * pod_mac, EthPodEvent event);
 void meshHandleTimeout();
 
+void *extEthLinkMonitor();
+void setIgnoreLinkEvent(bool enable);
 #endif

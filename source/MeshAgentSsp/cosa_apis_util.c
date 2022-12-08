@@ -632,8 +632,8 @@ void  led_state(eLedColor color,eLedAnimation animation)
  */
 void  handle_led_status(eMeshSyncStatus status)
 {
-    static bool ctr_status = false;
     static eMeshSyncStatus current_status;
+    static bool ctr_status = false;
 
     if (current_status == status)
     {

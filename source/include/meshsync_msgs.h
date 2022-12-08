@@ -111,6 +111,7 @@ typedef enum {
     MESH_SYNC_STATUS,
     MESH_WIFI_EXTENDER_MODE,
     MESH_ADD_DNSMASQ,
+    MESH_EXT_EB_PORT,
 #endif
 #ifdef WAN_FAILOVER_SUPPORTED
     MESH_BACKUP_NETWORK,
@@ -329,7 +330,7 @@ typedef struct _MeshUrlChange {
  * Mesh Sync msg for ethernet mac filter of pod
  */
 typedef struct _MeshEthernetMac {
-    char mac[MAX_MAC_ADDR_LEN];  // mac //Prash
+    char mac[MAX_MAC_ADDR_LEN];  // mac
 } MeshEthMac;
 
 /**
