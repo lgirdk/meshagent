@@ -44,6 +44,7 @@ start_plume() {
 
 stop_plume() {
     /usr/plume/scripts/managers.init stop
+    echo -e "group_remove\n" | plume_netlink
 }
 
 fd=205
