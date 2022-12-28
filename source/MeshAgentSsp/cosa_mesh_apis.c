@@ -3574,15 +3574,20 @@ void* handleMeshEnable(void *Args)
             return NULL;
         }
 
+     bool is_meshenable_waiting = false;
 	 if (enable) {
             // This will only work if this service is started *AFTER* CcspWifi
             // If the service is not running, start it
-            if(!radio_check() || is_bridge_mode_enabled()) {
-              MeshError("Mesh Pre-check conditions failed, setting mesh wifi to disabled \n");
+            if(is_bridge_mode_enabled()) {
+              MeshError("Mesh Pre-check conditions failed, setting mesh wifi to disabled since the Device is in Bridge Mode\n");
               error =  MB_ERROR_PRECONDITION_FAILED;
               meshSetSyscfg(0, true);
               pthread_mutex_unlock(&mesh_handler_mutex);
               return NULL;
+            }
+            if(!radio_check()){
+                  MeshError("Mesh Radio's are down, wait and check for the radio's to be up\n");
+                  is_meshenable_waiting = true;
             }
 	    if(is_band_steering_enabled()) {
                    if(set_wifi_boolean_enable("Device.WiFi.X_RDKCENTRAL-COM_BandSteering.Enable", "false")==FALSE) {
@@ -3602,7 +3607,8 @@ void* handleMeshEnable(void *Args)
                 MeshInfo("Turning Mesh SSID enable\n");
                 set_mesh_APs(true);
             }
-            if ((err = svcagt_get_service_state(meshServiceName)) == 0)
+            // Check if the is_meshenable_waiting is true, before starting the mesh services
+            if ((!is_meshenable_waiting) && (err = svcagt_get_service_state(meshServiceName)) == 0)
             {
                 // returns "0" on success
                 if ((err = svcagt_set_service_state(meshServiceName, true)) != 0)
@@ -3614,7 +3620,7 @@ void* handleMeshEnable(void *Args)
                     success = FALSE;
                 }
             }
-        } else {
+         } else {
             // This will only work if this service is started *AFTER* CcspWifi
             // If the service is running, stop it
             if ((err = svcagt_get_service_state(meshServiceName)) == 1)
