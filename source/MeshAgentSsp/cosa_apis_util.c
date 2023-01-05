@@ -65,49 +65,6 @@ LedColor_Msg  meshLedColorArr[] = {
 extern int sysevent_fd_gs;
 extern token_t sysevent_token_gs;
 
-/**************************************************************************/
-/*! \fn static STATUS Mesh_SyseventGetInt
- **************************************************************************
- *  \brief Get sysevent Integer Value
- *  \return int/-1
- **************************************************************************/
-int Mesh_SyseventGetInt(const char *name)
-{
-  
-   /* Coverity Issue Fix - CID:72888  : UnInitialised Variable */  
-   unsigned char out_value[20] = {0};
-   
-   sysevent_get(sysevent_fd_gs, sysevent_token_gs, name, out_value,sizeof(out_value));
-   if(out_value[0] != '\0')
-   {
-      return atoi(out_value);
-   }
-   else
-   {
-      MeshInfo(("sysevent_get failed\n"));
-      return -1;
-   }
-}
-
-/**************************************************************************/
-/*! \fn static STATUS Mesh_SyseventSetInt
- **************************************************************************
- *  \brief Set sysevent Integer Value
- *  \return 0:success, <0: failure
- **************************************************************************/
-int Mesh_SyseventSetInt(const char *name, int int_value)
-{
-   unsigned char value[20] = {0};
-   sprintf(value, "%d", int_value);
-   return sysevent_set(sysevent_fd_gs, sysevent_token_gs, name, value, sizeof(value));
-}
-
-/**************************************************************************/
-/*! \fn static STATUS Mesh_SyseventGetInt
- **************************************************************************
- *  \brief Get sysevent Integer Value
- *  \return int/-1
- **************************************************************************/
 int Mesh_SyseventGetStr(const char *name, unsigned char *out_value, int outbufsz)
 {
     sysevent_get(sysevent_fd_gs, sysevent_token_gs, name, out_value, outbufsz);
