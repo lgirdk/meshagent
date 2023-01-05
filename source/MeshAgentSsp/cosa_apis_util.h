@@ -94,8 +94,6 @@ int getMeshErrorCode();
 void* handleMeshEnable(void *Args);
 void meshSetSyscfg(bool enable, bool commitSyscfg);
 
-int Mesh_SyseventGetInt(const char *name);
-int Mesh_SyseventSetInt(const char *name, int int_value);
 int Mesh_SyseventGetStr(const char *name, unsigned char *out_value, int outbufsz);
 int Mesh_SyseventSetStr(const char *name, unsigned char *value, int bufsz, bool toArm);
 int Mesh_SysCfgGetInt(const char *name);
