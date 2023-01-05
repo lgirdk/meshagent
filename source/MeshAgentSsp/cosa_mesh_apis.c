@@ -669,8 +669,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     switch (rxMsg.msgType) {
     case MESH_WIFI_RADIO_CHANNEL:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d|%d",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%d",
                 rxMsg.data.wifiRadioChannel.index,
                 rxMsg.data.wifiRadioChannel.channel);
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_RADIO_CHANNEL].sysStr, cmd, 0, false);
@@ -678,9 +678,9 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_RADIO_CHANNEL_MODE:
     {
-        char cmd[256] = {0};
+        char cmd[256];
         /* Coverity Issue Fix - CID:124800 : Printf args*/
-        sprintf(cmd, "MESH|%d|%s|%s|%s|%s",
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%s|%s|%s|%s",
                 rxMsg.data.wifiRadioChannelMode.index,
                 rxMsg.data.wifiRadioChannelMode.channelMode,
                 (rxMsg.data.wifiRadioChannelMode.gOnlyFlag?"true":"false"),
@@ -692,8 +692,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_RADIO_OPERATING_STD:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d|%s",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%s",
                 rxMsg.data.wifiRadioOperatingStd.index,
                 rxMsg.data.wifiRadioOperatingStd.channelMode
         );
@@ -702,8 +702,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_SSID_NAME:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d|%s",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%s",
                 rxMsg.data.wifiSSIDName.index,
                 rxMsg.data.wifiSSIDName.ssid
         );
@@ -712,8 +712,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_SSID_CHANGED:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d|%d|%s",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%d|%s",
                 rxMsg.data.wifiSSIDChanged.index,
                 rxMsg.data.wifiSSIDChanged.enable,
                 rxMsg.data.wifiSSIDChanged.ssid
@@ -724,7 +724,7 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
 #if defined(ONEWIFI)
     case MESH_WIFI_EXTENDER_MODE:
     {
-        char cmd[256]={0};
+        char cmd[256];
         snprintf(cmd, sizeof(cmd), "MESH|%s",
                 rxMsg.data.onewifiXLEExtenderMode.InterfaceName);
         MeshError("Notify onewifi for MESH_WIFI_EXTENDER_MODE cmd:%s\n",cmd);
@@ -734,8 +734,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
 #endif
     case MESH_WIFI_SSID_ADVERTISE:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d|%s",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%s",
                 rxMsg.data.wifiSSIDAdvertise.index,
                 (rxMsg.data.wifiSSIDAdvertise.enable?"true":"false")
         );
@@ -744,8 +744,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_AP_SECURITY:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d|%s|%s|%s",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%s|%s|%s",
                 rxMsg.data.wifiAPSecurity.index,
                 rxMsg.data.wifiAPSecurity.passphrase,
                 rxMsg.data.wifiAPSecurity.secMode,
@@ -756,8 +756,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_AP_KICK_ASSOC_DEVICE:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d|%s",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%s",
                 rxMsg.data.wifiAPKickAssocDevice.index,
                 rxMsg.data.wifiAPKickAssocDevice.mac
         );
@@ -766,8 +766,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_AP_KICK_ALL_ASSOC_DEVICES:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d",
                 rxMsg.data.wifiAPKickAllAssocDevices.index
         );
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_AP_KICK_ALL_ASSOC_DEVICES].sysStr, cmd, 0, false);
@@ -786,8 +786,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_AP_DEL_ACL_DEVICE:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d|%s",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%s",
                 rxMsg.data.wifiAPDelAclDevice.index,
                 rxMsg.data.wifiAPDelAclDevice.mac
         );
@@ -796,8 +796,8 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_MAC_ADDR_CONTROL_MODE:
     {
-        char cmd[256] = {0};
-        sprintf(cmd, "MESH|%d|%s|%s",
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "MESH|%d|%s|%s",
                 rxMsg.data.wifiMacAddrControlMode.index,
                 (rxMsg.data.wifiMacAddrControlMode.isEnabled?"true":"false"),
                 (rxMsg.data.wifiMacAddrControlMode.isBlacklist?"true":"false")
@@ -807,11 +807,11 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_WIFI_STATUS:
     {
-        char cmd[256] = {0};
+        char cmd[256];
 
         g_pMeshAgent->meshStatus = rxMsg.data.wifiStatus.status;
 
-        sprintf(cmd, "MESH|%s",meshWifiStatusArr[rxMsg.data.wifiStatus.status].mStr);
+        snprintf(cmd, sizeof(cmd), "MESH|%s",meshWifiStatusArr[rxMsg.data.wifiStatus.status].mStr);
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_STATUS].sysStr, cmd, 0, true);
 
     }
@@ -879,7 +879,7 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_ADD_DNSMASQ:
     {
-        char cmd[256] = {0};
+        char cmd[256];
         snprintf(cmd, sizeof(cmd),"interface=%s|dhcp-range=%s,%s,255.255.255.0,infinite",
                 rxMsg.data.STADnsMasqInfo.ifname, rxMsg.data.STADnsMasqInfo.dhcp_start,
                 rxMsg.data.STADnsMasqInfo.dhcp_end);
@@ -1805,10 +1805,10 @@ static void changeChBandwidth(int radioId, int channelBw)
 {
   CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
   parameterValStruct_t   param_val[1];
-  char parameterName[256] = {0};
-  char parameterValue[16] = {0};
-  char  component[256]  = "eRT.com.cisco.spvtg.ccsp.wifi";
-  char  bus[256]        = "/com/cisco/spvtg/ccsp/wifi";
+  char parameterName[256];
+  char parameterValue[16];
+  char *component = "eRT.com.cisco.spvtg.ccsp.wifi";
+  char *bus = "/com/cisco/spvtg/ccsp/wifi";
   char* faultParam      = NULL;
   int   ret             = 0;
 
@@ -1843,8 +1843,8 @@ BOOL set_wifi_boolean_enable(char *parameterName, char *parameterValue)
 {
     CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
     parameterValStruct_t   param_val[1];
-    char  component[256]  = "eRT.com.cisco.spvtg.ccsp.wifi";
-    char  bus[256]        = "/com/cisco/spvtg/ccsp/wifi";
+    char *component = "eRT.com.cisco.spvtg.ccsp.wifi";
+    char *bus = "/com/cisco/spvtg/ccsp/wifi";
     char* faultParam      = NULL;
     int   ret             = 0;
 
@@ -1878,8 +1878,8 @@ static BOOL is_configure_wifi_enabled(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
-    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.pam";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/pam";
+    char *dstComponent = "eRT.com.cisco.spvtg.ccsp.pam";
+    char *dstPath = "/com/cisco/spvtg/ccsp/pam";
     char *paramNames[]={"Device.DeviceInfo.X_RDKCENTRAL-COM_ConfigureWiFi"};
     int  valNum = 0;
     errno_t rc = -1;
@@ -1921,8 +1921,8 @@ static BOOL is_band_steering_enabled(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
-    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.wifi";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
+    char *dstComponent = "eRT.com.cisco.spvtg.ccsp.wifi";
+    char *dstPath = "/com/cisco/spvtg/ccsp/wifi";
     char *paramNames[]={"Device.WiFi.X_RDKCENTRAL-COM_BandSteering.Enable"};
     int  valNum = 0;
     errno_t rc = -1;
@@ -1964,8 +1964,8 @@ static BOOL is_reset_needed(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
-    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.wifi";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
+    char *dstComponent = "eRT.com.cisco.spvtg.ccsp.wifi";
+    char *dstPath = "/com/cisco/spvtg/ccsp/wifi";
     char *paramNames[]={"Device.WiFi.SSID.13.Enable", "Device.WiFi.SSID.14.Enable"};
     int  valNum = 0;
     BOOL ret_b=FALSE;
@@ -2024,8 +2024,8 @@ static BOOL is_SSID_enabled(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
-    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.wifi";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
+    char *dstComponent = "eRT.com.cisco.spvtg.ccsp.wifi";
+    char *dstPath = "/com/cisco/spvtg/ccsp/wifi";
     char *paramNames[]={"Device.WiFi.SSID.13.Status" , "Device.WiFi.SSID.14.Status"};
     int  valNum = 0;
     BOOL ret_b=FALSE;
@@ -2107,21 +2107,16 @@ static BOOL radio_check(void)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
-    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.wifi";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
+    char *dstComponent = "eRT.com.cisco.spvtg.ccsp.wifi";
+    char *dstPath = "/com/cisco/spvtg/ccsp/wifi";
     int  valNum = 0;
     BOOL ret_b=FALSE;
     int ind = -1;
     errno_t rc = -1;
     int radioDown = 0;
-    char radio1[64] = {0};
-    char radio2[64] = {0};
-    char state[10] = {0};
-
-    sprintf(radio1, "%s", isPaceXF3 ? RADIO_ENABLE_24 : RADIO_STATUS_24);
-    sprintf(radio2, "%s", isPaceXF3 ? RADIO_ENABLE_50 : RADIO_STATUS_50);
-    sprintf(state, "%s", isPaceXF3 ?  STATE_FALSE : STATE_DOWN);
-
+    char *radio1 = isPaceXF3 ? RADIO_ENABLE_24 : RADIO_STATUS_24;
+    char *radio2 = isPaceXF3 ? RADIO_ENABLE_50 : RADIO_STATUS_50;
+    char *state = isPaceXF3 ? STATE_FALSE : STATE_DOWN;
     char *paramNames[]={radio1,radio2};
 
     ret = CcspBaseIf_getParameterValues(
@@ -2141,7 +2136,6 @@ static BOOL radio_check(void)
 
     if(valStructs)
     {
-
             rc = strcmp_s(state,strlen(state),valStructs[0]->parameterValue,&ind);
             ERR_CHK(rc);
             if ((ind ==0 ) && (rc == EOK)) 
@@ -2257,8 +2251,8 @@ static bool Mesh_getPartnerBasedURL(char *url)
 {
     ANSC_STATUS ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
-    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.pam";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/pam";
+    char *dstComponent = "eRT.com.cisco.spvtg.ccsp.pam";
+    char *dstPath = "/com/cisco/spvtg/ccsp/pam";
     char *paramNames[]={PARTNER_REDIRECTORURL_PARAMNAME};
     int  valNum = 0;
     MeshInfo("Fetching the Redirector URL based on partnerID\n");
@@ -2582,7 +2576,7 @@ bool Mesh_ExtenderBridge(char *ifname)
     bool status = true;
     MeshTunnelSetVlan data;
     bool ret = false;
-    char vlan_ifname[64] = {0};
+    char vlan_ifname[64];
     memset(&data, 0, sizeof(MeshTunnelSetVlan));
 
     //rbus call for bridge name from dmsb.Mesh.WAN.Interface.Name
@@ -2887,7 +2881,7 @@ int getRbusStaIfName(unsigned int index)
 {
     rbusValue_t value;
     bool ret = true;
-    char name[MAX_IFNAME_LEN] = {0};
+    char name[MAX_IFNAME_LEN];
     int rc = RBUS_ERROR_SUCCESS;
     const char* newValue;
 
@@ -2965,7 +2959,7 @@ void *uplinkHandleFunction()
 int getRbusStaBssId(unsigned int index)
 {
     rbusValue_t value;
-    char name[MAX_IFNAME_LEN] = {0};
+    char name[MAX_IFNAME_LEN];
     int rc = RBUS_ERROR_SUCCESS;
     bool ret = true;
     const char* newValue;
@@ -3788,8 +3782,8 @@ BOOL is_radio_enabled(char *dcs1, char *dcs2)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
-    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.wifi";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
+    char *dstComponent = "eRT.com.cisco.spvtg.ccsp.wifi";
+    char *dstPath = "/com/cisco/spvtg/ccsp/wifi";
     char *paramNames[]={dcs1,dcs2};
     int  valNum = 0;
     BOOL ret_b=FALSE;
@@ -4745,7 +4739,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // Radio config sysevents will be formatted: ORIG|index|channel
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -4804,7 +4798,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // Radio config sysevents will be formatted: ORIG|index|channel
                 if (val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -4892,12 +4886,13 @@ static void *Mesh_sysevent_handler(void *data)
             {
                 if (val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
                     bool process = true;
                     MeshSync mMsg = {0};
+
                     mMsg.msgType = MESH_WIFI_RADIO_OPERATING_STD;
                     token = strtok_r(val, delim, &contextStr);
                     while( token != NULL && process)
@@ -4952,7 +4947,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // SSID config sysevents will be formatted: ORIG|index|ssid
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5014,7 +5009,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // SSID config sysevents will be formatted: ORIG|index|ssid
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5081,7 +5076,7 @@ static void *Mesh_sysevent_handler(void *data)
             {
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5181,7 +5176,7 @@ static void *Mesh_sysevent_handler(void *data)
             {
 		if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5258,8 +5253,8 @@ static void *Mesh_sysevent_handler(void *data)
                 // AP config sysevents will be formatted: ORIG|index|passphrase|secMode|encryptMode
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
-                    char *token=NULL;
+                    char *delim = "|";
+                    char *token;
                     int idx = 0;
                     bool valFound = false;
                     bool process = true;
@@ -5353,7 +5348,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // AP config sysevents will be formatted: ORIG|index|passphrase|secMode|encryptMode
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5420,7 +5415,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // AP config sysevents will be formatted: ORIG|index|passphrase|secMode|encryptMode
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5475,7 +5470,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // AP config sysevents will be formatted: ORIG|index|passphrase|secMode|encryptMode
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5542,7 +5537,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // AP config sysevents will be formatted: ORIG|index|passphrase|secMode|encryptMode
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5609,7 +5604,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // AP config sysevents will be formatted: ORIG|index|passphrase|secMode|encryptMode
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5678,7 +5673,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // mesh sysevents will be formatted: ORIG|mode
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5779,7 +5774,7 @@ static void *Mesh_sysevent_handler(void *data)
             {
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5844,7 +5839,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // Url config sysevents will be formatted: ORIG|url
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5904,7 +5899,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // Subnet change config sysevents will be formatted: ORIG|gwIP|netmask
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
@@ -5978,7 +5973,7 @@ static void *Mesh_sysevent_handler(void *data)
                 // TxRate config sysevents will be formatted: ORIG|index|BasicRates:<basicRates>|OperationalRates:<operationalRates>
                 if ( val[0] != '\0')
                 {
-                    const char delim[2] = "|";
+                    char *delim = "|";
                     char *token;
                     int idx = 0;
                     bool valFound = false;
