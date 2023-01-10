@@ -44,8 +44,11 @@
 #define MESHBHAUL_BR         "br403"
 #define XHS_VLAN             101
 #define LNF_VLAN             106
+#define PRIV_VLAN            100
+#define MAX_VLANS            3
 #define XHS_BR               "brlan1"
 #define LNF_BR               "br106"
+#define PRIV_BR              "brlan0"
 #define LNF_BR_XF3           "brlan6"
 
 #ifdef WAN_FAILOVER_SUPPORTED
@@ -119,6 +122,7 @@ typedef enum {
 #ifdef ONEWIFI
     MESH_GET_STAINFO,
     MESH_BRHOME_IP,
+    MESH_TRIGGER_DISASSOC,
 #endif
     MESH_SYNC_MSG_TOTAL
 } eMeshSyncType;
@@ -474,6 +478,10 @@ typedef struct _MeshSync_status {
     eMeshSyncStatus status;
 } MeshSync_status;
 
+typedef struct _MeshTriggerDisassociation
+{
+    uint8_t status;
+}MeshTriggerDisassociation;
 #endif
 
 /**
@@ -519,6 +527,7 @@ typedef struct _MeshSync {
         MeshBrhomeIp                    brhomeIP;
         MeshSta_dnsmasq_info            STADnsMasqInfo;
         MeshSync_status                 syncStatus;
+        MeshTriggerDisassociation       triggerStatus;
 #endif
         MeshWifiOffChannelScanEnable    wifiOffChannelScanEnable;
     } data;

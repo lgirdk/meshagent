@@ -327,7 +327,8 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     ,
     {MESH_GET_STAINFO,                      "MESH_GET_STAINFO",                     "mesh_get_stainfo"}
     ,
-    {MESH_BRHOME_IP,                        "MESH_BRHOME_IP",                        "remote_ssh_server_ip"}
+    {MESH_BRHOME_IP,                        "MESH_BRHOME_IP",                        "remote_ssh_server_ip"},
+    {MESH_TRIGGER_DISASSOC,                 "MESH_TRIGGER_DISASSOC",                "mesh_trigger_disaasociation_req"}
 #endif
     };
 typedef struct
@@ -906,6 +907,27 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     {
         MeshInfo(("Received MESH_SYNC_STATUS sync message.\n"));
         handle_led_status(rxMsg.data.syncStatus.status);
+    }
+    break;
+    case MESH_TRIGGER_DISASSOC:
+    {
+        MeshInfo(("Received MESH_TRIGGER_DISASSOC\n"));
+        int rc = -1;
+        int connect = true;
+        rbusValue_t value;
+
+        rbusValue_Init(&value);
+        rbusValue_SetBoolean(value, connect);
+
+        rc = rbus_set(handle, MESH_STA_DISCONNECT_EVENT, value, NULL);
+        if(rc == RBUS_ERROR_SUCCESS)
+        {
+            MeshInfo(("Successfully Published MESH_TRIGGER_DISASSOC\n"));
+        }
+        else
+        {
+            MeshInfo(("Error in publishing MESH_TRIGGER_DISASSOC\n"));
+        }
     }
     break;
 #endif
@@ -2517,6 +2539,36 @@ bool Mesh_SetMeshEthBhaul(bool enable, bool init, bool commitSyscfg)
     return TRUE;
 }
 #ifdef WAN_FAILOVER_SUPPORTED
+
+static void Mesh_ext_create_lanVlans( char *ifname)
+{
+   char vlan_ifname[MAX_IFNAME_LEN] = {0};
+   MeshTunnelSetVlan data;
+
+   int i=0;
+   int lan_vlans[] = {PRIV_VLAN,XHS_VLAN,LNF_VLAN};
+   char *lan_bridges[] = {PRIV_BR,XHS_BR,LNF_BR};
+
+   for( i = 0; i < MAX_VLANS; i++)
+   {
+       if(!strcmp( ifname,ETHBACKHAUL_VLAN) && lan_vlans[i] == PRIV_VLAN)
+           continue;
+
+       //Send the bridge config to OvsAgent
+       memset(&data, 0, sizeof(MeshTunnelSetVlan));
+       memset(vlan_ifname, '\0', MAX_IFNAME_LEN);
+
+       snprintf(vlan_ifname, sizeof(vlan_ifname),
+                     "%s.%d", ifname, lan_vlans[i]);
+       strncpy(data.ifname,  vlan_ifname,sizeof(data.ifname));
+       strncpy(data.parent_ifname, ifname,sizeof(data.parent_ifname));
+       strncpy(data.bridge, lan_bridges[i],sizeof(data.bridge));
+       data.vlan = lan_vlans[i];
+       MeshInfo("Mesh_ext_create_lanVlans lan vlan: %s, bridge: %s\n", data.ifname, data.bridge);
+       Mesh_ModifyPodTunnelVlan(&data);
+   }
+}
+
 /**
  * @brief Mesh Agent ExtenderBridge creation
  *
@@ -2550,7 +2602,7 @@ bool Mesh_ExtenderBridge(char *ifname)
 	status = false;
         MeshError("get_wan_bridge get failed \n");
     }
-    if(!strcmp( ifname, "g-eth0.123"))
+    if(!strcmp( ifname, ETHBACKHAUL_VLAN))
     {
         rc = v_secure_system("ethtool -K %s sg off",ifname);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
@@ -2561,6 +2613,7 @@ bool Mesh_ExtenderBridge(char *ifname)
         Mesh_vlan_network(ifname);
 #endif
     }
+    Mesh_ext_create_lanVlans(ifname);
     return status;
 }
 #endif
@@ -3374,7 +3427,7 @@ int Mesh_UplinkXleEthTunnel(char * if_name)
         {
             MeshError("Failed to create %s.123\n",if_name);
         }
-        
+     
 	rc = v_secure_system("ethtool -K %s.123 sg off",if_name);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {

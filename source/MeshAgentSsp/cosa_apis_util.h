@@ -39,6 +39,7 @@
 #define      GATEWAY_FAILOVER_BRIDGE  "brSTA"
 #define      MESH_BHAUL_BRIDGE        "br403"
 #define      MESH_XLE_BRIDGE          "br-home"
+#define      ETHBACKHAUL_VLAN         "g-eth0.123"
 
 #ifndef RDK_LED_MANAGER_EXIST
 typedef enum {
