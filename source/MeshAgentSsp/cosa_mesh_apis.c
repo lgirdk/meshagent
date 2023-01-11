@@ -215,25 +215,14 @@ rbusDataElement_t meshRbusDataElements[NUM_OF_RBUS_PARAMS] = {
 };
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
-typedef struct _MeshStaStatus_node
-{
-   char sta_ifname[MAX_IFNAME_LEN];
-   char bssid[MAX_BSS_ID_STR];
-   bool state;
-   struct _MeshStaStatus_node  *next;
-}MeshStaStatus_node;
-
 #if defined(ONEWIFI)
 static pthread_t tid_xle_link;
 #endif
 
-MeshStaStatus_node sta[MAX_IF];
-MeshStaStatus_node * searchStaActive();
+MeshStaStatus_node sta;
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
 static int device_mode = 0;
 #endif
-unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
-static unsigned char mesh_sta_bssid[MAX_BSS_ID_STR];
 unsigned char mesh_backhaul_ifname[MAX_IFNAME_LEN];
 #endif
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
@@ -2764,39 +2753,12 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
 }
 #endif
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED) || defined(GATEWAY_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
-MeshStaStatus_node *  addSta(int index,  bool state)
+void changeStaState(bool state)
 {
-    sta[index].state = state;
-    strncpy(sta[index].sta_ifname,mesh_sta_ifname,sizeof(sta[index].sta_ifname));
-    strncpy(sta[index].bssid,mesh_sta_bssid,sizeof(sta[index].bssid));
-    MeshInfo("addSta: sta_ifname:%s, state : %d, bssid:%s\n",sta[index].sta_ifname,sta[index].state,sta[index].bssid);
-
-    return (sta + index);
+    sta.state = state;
+    MeshInfo("changeStaState: sta_ifname:%s, state : %d, bssid:%s\n",sta.sta_ifname,sta.state,sta.bssid);
 }
 
-MeshStaStatus_node * searchStaByIfname(char *ifname)
-{
-    int i;
-
-    for(i = 0;i < MAX_IF; i++)
-    {
-        if (strcmp(sta[i].sta_ifname, ifname) == 0 )
-            return (sta + i);
-    }
-    return NULL;
-}
-
-MeshStaStatus_node * searchStaActive()
-{
-    int i;
-
-    for(i = 0;i < MAX_IF; i++)
-    {
-        if (sta[i].state == true )
-            return (sta + i);
-    }
-    return NULL;
-}
 #endif
 /**
  * @brief Mesh meshRbusInit
@@ -2920,8 +2882,8 @@ int getRbusStaIfName(unsigned int index)
     }
 
     newValue = rbusValue_GetString(value, NULL);
-    snprintf(mesh_sta_ifname, MAX_IFNAME_LEN, "%s", newValue);
-    MeshInfo("Sta if_name = [%s]\n", mesh_sta_ifname);
+    snprintf(sta.sta_ifname, MAX_IFNAME_LEN, "%s", newValue);
+    MeshInfo("Sta if_name = [%s]\n", sta.sta_ifname);
 
     return ret;
 }
@@ -2950,14 +2912,14 @@ void *uplinkHandleFunction()
         MeshWarning("%s Is not running\n",meshServiceName);
     }
     //Start udhcpc for connected interface
-    if(!udhcpc_start(mesh_sta_ifname))
+    if(!udhcpc_start(sta.sta_ifname))
     {
-        MeshWarning("Failed to start udhcpc for %s\n",mesh_sta_ifname);
+        MeshWarning("Failed to start udhcpc for %s\n",sta.sta_ifname);
     }
 
-    if (get_ipaddr_subnet(mesh_sta_ifname, local_ip, remote_ip))
+    if (get_ipaddr_subnet(sta.sta_ifname, local_ip, remote_ip))
     {
-        if(!handle_uplink_bridge(mesh_sta_ifname, local_ip, remote_ip, true))
+        if(!handle_uplink_bridge(sta.sta_ifname, local_ip, remote_ip, true))
         {
             if(udhcpc_start(GATEWAY_FAILOVER_BRIDGE))
 	    {
@@ -2975,9 +2937,9 @@ void *uplinkHandleFunction()
     }
     else
     {
-        MeshWarning("Ip is not configured for %s, So uplink GRE is not created\n",mesh_sta_ifname);
+        MeshWarning("Ip is not configured for %s, So uplink GRE is not created\n",sta.sta_ifname);
     }
-    udhcpc_stop(mesh_sta_ifname);
+    udhcpc_stop(sta.sta_ifname);
     is_uplink_tid_exist = 0;
 
     return NULL;
@@ -2998,10 +2960,10 @@ int getRbusStaBssId(unsigned int index)
         ret = false;
     }
     newValue = rbusValue_GetString(value, NULL);
-    snprintf(mesh_sta_bssid, MAX_BSS_ID_STR, "%02x:%02x:%02x:%02x:%02x:%02x", *newValue, \
+    snprintf(sta.bssid, MAX_BSS_ID_STR, "%02x:%02x:%02x:%02x:%02x:%02x", *newValue, \
              *(newValue +1),*(newValue +2),*(newValue +3),*(newValue +4), \
              *(newValue +5));
-    MeshInfo("Sta bssid: [%s]\n", mesh_sta_bssid);
+    MeshInfo("Sta bssid: [%s]\n", sta.bssid);
 
     return ret;
 }
@@ -3017,7 +2979,6 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
     unsigned int sta_connect_status = 0;
     wifi_sta_conn_info_t connect_info;
     const unsigned char *temp_buff;
-    MeshStaStatus_node * sta;
 #endif 
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
     int err;
@@ -3104,7 +3065,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 	if(gateway_present == AP_ACTIVE)
 	{
             handle_uplink_bridge(NULL, NULL, NULL, false);
-	    udhcpc_stop(mesh_sta_ifname);
+            udhcpc_stop(sta.sta_ifname);
             udhcpc_stop(GATEWAY_FAILOVER_BRIDGE);
 	    rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE,MESH_TYPE_STRING);
             if(rc == RBUS_ERROR_SUCCESS)
@@ -3137,14 +3098,14 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 
         memcpy(&connect_info, temp_buff, len);
         conn_status = (connect_info.connect_status == wifi_connection_status_connected) ? true:false;
-        snprintf(mesh_sta_bssid, MAX_BSS_ID_STR, "%02x:%02x:%02x:%02x:%02x:%02x", connect_info.bssid[0], \
+        snprintf(sta.bssid, MAX_BSS_ID_STR, "%02x:%02x:%02x:%02x:%02x:%02x", connect_info.bssid[0], \
              connect_info.bssid[1],connect_info.bssid[2],connect_info.bssid[3],connect_info.bssid[4], \
              connect_info.bssid[5]);
-        MeshInfo("%s:Connected Bssid:%s\n",__FUNCTION__,mesh_sta_bssid);
         getRbusStaIfName(index);
 	//Station mode & uplink GRE support in the main gateway
         sta_connect_status = conn_status?1:0;
-	MeshInfo("sta_connect_status = %d",sta_connect_status);
+        MeshInfo("%s:Ifname:%s Bssid:%s connect_status = %d \n",__FUNCTION__,sta.sta_ifname, sta.bssid,sta_connect_status);
+
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
 	if ((gateway_present == STA_ACTIVE))
         {
@@ -3166,53 +3127,33 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         else
 	{
 #endif
-            if (conn_status == true) {
+            if (conn_status == true) 
+            {
                 if (!g_pMeshAgent->ExtEthPortEnable || (g_pMeshAgent->ExtEthPortEnable && (!xle_eth_up)))
                     handle_led_status(MESH_STA_CONNECTED);
-                MeshInfo("%s:%d: Station successfully connected with external AP radio:%d\r\n",
-                        __func__, __LINE__, index - 1);
-                sta =  searchStaByIfname(mesh_sta_ifname);
-                if (!sta)
-                {
-                    MeshInfo("%s:%d Sta not present so adding\n",__FUNCTION__, __LINE__);
-                    sta = addSta(index-1,true);
-		    if (!g_pMeshAgent->ExtEthPortEnable || (g_pMeshAgent->ExtEthPortEnable && (!xle_eth_up)))
-                        Mesh_sendStaInterface(sta->sta_ifname,sta->bssid,true);
-		    else
-                        MeshInfo("%s skipping sta because ethbhaul is enabled\n",__FUNCTION__);
-                }
-                else
-                {
-                    if(!sta->state)
-                    {
-                        MeshInfo("%s:%d Sta already exist so change the state \n",__FUNCTION__, __LINE__);
-			if (!g_pMeshAgent->ExtEthPortEnable || (g_pMeshAgent->ExtEthPortEnable && (!xle_eth_up)))
-                            Mesh_sendStaInterface(sta->sta_ifname,sta->bssid,true);
-			else
-                            MeshInfo("%s skipping sta because ethbhaul is enabled\n",__FUNCTION__);
+                MeshInfo("%s:Station Connected to ifname:%s Bssid:%s\n",__FUNCTION__,sta.sta_ifname, sta.bssid);
+                changeStaState(true);
 
-                        sta->state = true;
-                    }
-                }
+                if (!g_pMeshAgent->ExtEthPortEnable || (g_pMeshAgent->ExtEthPortEnable && (!xle_eth_up)))
+                    Mesh_sendStaInterface(sta.sta_ifname,sta.bssid,true);
+                else
+                    MeshInfo("%s skipping sta because ethbhaul is enabled\n",__FUNCTION__);
             }
-            else{
+            else
+            {
+                MeshInfo("%s:Station Disconnected from  ifname:%s Bssid:%s\n",__FUNCTION__,sta.sta_ifname, sta.bssid);
+
                 if (!g_pMeshAgent->ExtEthPortEnable || (g_pMeshAgent->ExtEthPortEnable && (!xle_eth_up)))
                     handle_led_status(MESH_STA_DISCONNECTED);
-                MeshError("%s:%d: Disconnected with external AP:%d radio:%d\r\n",
-                        __func__, __LINE__, conn_status, index - 1);
-                sta =  searchStaByIfname(mesh_sta_ifname);
-                if(sta)
-                {
-                    if (sta->state)
-                    {
-                        if (!g_pMeshAgent->ExtEthPortEnable || (g_pMeshAgent->ExtEthPortEnable && (!xle_eth_up)))
-                            Mesh_sendStaInterface(sta->sta_ifname,sta->bssid, false);
-			else
-                            MeshInfo("%s skipping sta because ethbhaul is enabled\n",__FUNCTION__);
 
-                        sta->state = false;
-                    }
-                    memset(mesh_sta_ifname, 0, MAX_IFNAME_LEN);
+                if (sta.state)
+                {
+                    if (!g_pMeshAgent->ExtEthPortEnable || (g_pMeshAgent->ExtEthPortEnable && (!xle_eth_up)))
+                        Mesh_sendStaInterface(sta.sta_ifname,sta.bssid, false);
+                    else
+                        MeshInfo("%s skipping sta because ethbhaul is enabled\n",__FUNCTION__);
+
+                    changeStaState(false);
                 }
             }
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
@@ -3260,7 +3201,6 @@ void rbus_get_gw_present()
 {
     rbusValue_t value;
     unsigned int data;
-    MeshStaStatus_node *sta = NULL;
     int rc = RBUS_ERROR_SUCCESS;
 
     rc = rbus_get(handle,RBUS_GATEWAY_PRESENT, &value);
@@ -3282,8 +3222,7 @@ void rbus_get_gw_present()
     MeshInfo("rbus_get for %s: value:%s\n",RBUS_GATEWAY_PRESENT, (data?"STA_ACTIVE":"AP_ACTIVE"));
     if(gateway_present == STA_ACTIVE)
     {
-        sta =  searchStaActive();
-        if (sta)
+        if (sta.state)
         {
             MeshInfo(("STA is associated and gateway_present == STA_ACTIVE, create brSTA\n"));
 	    pthread_create(&tid_handle, NULL, uplinkHandleFunction,NULL);
@@ -3393,12 +3332,9 @@ int Mesh_rebootDevice()
 
 void  Mesh_sendCurrentSta()
 {
-    MeshStaStatus_node * sta = NULL;
-
     if (!Mesh_isExtEthConnected())
     {
-        sta =  searchStaActive();
-        Mesh_sendStaInterface(sta ? sta->sta_ifname: NULL , sta ? sta->bssid : NULL, sta ? true : false);
+        Mesh_sendStaInterface(sta.state ? sta.sta_ifname: NULL , sta.state ? sta.bssid : NULL, sta.state ? true : false);
     }
     else
     {
@@ -3451,7 +3387,6 @@ int get_sta_active_interface_name()
     wifi_connection_status_t connect_status;
     const unsigned char *temp_buff;
     char *pStrVal = NULL;
-    MeshStaStatus_node * sta= NULL;
 
     pInputParam[numOfInputParams] = first_arg;
     numOfInputParams = 1;
@@ -3473,26 +3408,18 @@ int get_sta_active_interface_name()
                 memcpy(&connect_status, temp_buff, len);
                 conn_status = (connect_status == wifi_connection_status_connected) ? true:false;
                 if (conn_status == true) {
-                    MeshInfo("%s:%d: Station successfully connected with external AP radio:%d\r\n",
-                              __func__, __LINE__, index - 1);
                     getRbusStaIfName(index);
 		    getRbusStaBssId(index);
-                    sta =  searchStaByIfname(mesh_sta_ifname);
-                    if (!sta){
-                        sta = addSta(index-1,true);
-                        MeshInfo("Sta is connected to %s  when mesh starts\n",sta->sta_ifname );
+                    changeStaState(true);
+                    MeshInfo("%s:Connected to sta ifname:%s, bssid:%s\n",__FUNCTION__,sta.sta_ifname,sta.bssid);
 #if defined (RDKB_EXTENDER_ENABLED)
-                        if (!g_pMeshAgent->ExtEthPortEnable || (g_pMeshAgent->ExtEthPortEnable && (!xle_eth_up)))
-			    Mesh_sendStaInterface(sta->sta_ifname,sta->bssid,true);
-                        else
-                            MeshInfo("%s skipping sta because ethbhaul is enabled\n",__FUNCTION__);
+                    if (!g_pMeshAgent->ExtEthPortEnable || (g_pMeshAgent->ExtEthPortEnable && (!xle_eth_up)))
+                        Mesh_sendStaInterface(sta.sta_ifname,sta.bssid,true);
+                    else
+                        MeshInfo("%s skipping sta because ethbhaul is enabled\n",__FUNCTION__);
 #endif
-                    }
-                    else{
-                        MeshInfo("%s:%d: Sta interface is already there in list %s\r\n",__func__, __LINE__,sta->sta_ifname);
-                        sta->state = true;
-                    }
                 } else {
+                    changeStaState(false);
                     MeshInfo("%s:%d: Station is not connected\r\n",__func__, __LINE__);
                 }
             }

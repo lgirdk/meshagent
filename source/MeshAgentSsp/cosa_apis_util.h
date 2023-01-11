@@ -66,6 +66,17 @@ typedef struct
 }LedAnimation_Msg;
 #endif
 
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
+typedef struct _MeshStaStatus_node
+{
+   char sta_ifname[MAX_IFNAME_LEN];
+   char bssid[MAX_BSS_ID_STR];
+   bool state;
+   struct _MeshStaStatus_node  *next;
+}MeshStaStatus_node;
+
+#endif
+
 typedef struct { unsigned char addr[MAX_IPV4_BYTES]; } os_ipaddr_t;
 
 bool Mesh_SetGreAcc(bool enable, bool init, bool commitSyscfg);

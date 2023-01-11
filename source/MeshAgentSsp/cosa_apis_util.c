@@ -38,7 +38,7 @@
 
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
 #define MAX_TIME_IN_SEC   60
-extern unsigned char mesh_sta_ifname[MAX_IFNAME_LEN];
+extern MeshStaStatus_node sta;
 #endif
 
 #if defined(ONEWIFI)
@@ -587,15 +587,15 @@ int handle_uplink_bridge(char *ifname, char * bridge_ip, char *pod_addr, bool cr
     }
     else
     {
-        rc = v_secure_system("/usr/bin/ovs-vsctl del-port %s g-%s", GATEWAY_FAILOVER_BRIDGE,mesh_sta_ifname);
+        rc = v_secure_system("/usr/bin/ovs-vsctl del-port %s g-%s", GATEWAY_FAILOVER_BRIDGE,sta.sta_ifname);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
-            MeshWarning("Failed to remove bridge %s from g-%s\n",GATEWAY_FAILOVER_BRIDGE,mesh_sta_ifname);
+            MeshWarning("Failed to remove bridge %s from g-%s\n",GATEWAY_FAILOVER_BRIDGE,sta.sta_ifname);
         }
-        rc = v_secure_system("ip link del g-%s", mesh_sta_ifname);
+        rc = v_secure_system("ip link del g-%s", sta.sta_ifname);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
-            MeshWarning("Failed to delete g-%s, maybe it doesn't exist?\n", mesh_sta_ifname);
+            MeshWarning("Failed to delete g-%s, maybe it doesn't exist?\n", sta.sta_ifname);
         }
         rc = v_secure_system("/usr/bin/ovs-vsctl del-br %s", GATEWAY_FAILOVER_BRIDGE);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
