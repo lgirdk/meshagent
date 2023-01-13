@@ -624,16 +624,15 @@ void Mesh_SendEthernetMac(char *mac)
   return;
 }
 
-static int Mesh_getEthPodIndex(char *cmac)
+static int Mesh_getIpOctet(char *Ip, int octet)
 {
- int i=0;
- int ret = -1;
- for(i =0; i < eth_mac_count; i++)
- {
-  if(!strcmp(cmac, EthPodMacs[i]))
-   return i;
- }
- return ret;
+    char *token = NULL, *rlocalIp = NULL;
+    char localIp [MAX_IP_LEN] = {'\0'};
+
+    strcpy(localIp, Ip);
+    rlocalIp = localIp;
+    while ((--octet >= 0) && (token = strtok_r(rlocalIp, ".", &rlocalIp)));
+    return (token ? atoi(token) : -1);
 }
 
 static void Mesh_SendPodAddresses()
@@ -1048,7 +1047,7 @@ int Mesh_EthBhaulPodVlanSetup(int PodIdx, bool isOvsMode)
 static void Mesh_EthPodTunnel(PodTunnel *tunnel)
 {
     int rc = -1;
-    int PodIdx = Mesh_getEthPodIndex(tunnel->podmac);
+    int PodIdx = Mesh_getIpOctet(tunnel->podaddr, 4);
     bool isOvsMode = access(OVS_ENABLED, F_OK) == 0;
 
     if(isXB3Platform) {
