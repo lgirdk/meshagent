@@ -95,6 +95,7 @@ const int MAX_MESSAGES=10;  // max number of messages the can be in the queue
 #endif
 
 #define ONEWIFI_ENABLED "/etc/onewifi_enabled"
+#define WFO_ENABLED     "/etc/WFO_enabled"
 #define OPENVSWITCH_LOADED "/sys/module/openvswitch"
 #define MESH_ENABLED "/nvram/mesh_enabled"
 #define LOCAL_HOST   "127.0.0.1"
@@ -229,6 +230,7 @@ static struct sockaddr_in dnsserverAddr;
 
 extern COSA_DATAMODEL_MESHAGENT* g_pMeshAgent;
 static bool oneWifiEnabled = false;
+static bool wanFailOverEnabled = false;
 
 bool g_offchanvalFound = false;
 bool g_offchanEnabled = false;
@@ -3320,7 +3322,7 @@ bool Mesh_SetGreAcc(bool enable, bool init, bool commitSyscfg)
         MeshInfo("%s: GRE Acc Commit:%d, Enable:%d\n",
             __FUNCTION__, commitSyscfg, enable);
         if (enable && (!Mesh_GetEnabled(meshSyncMsgArr[MESH_WIFI_ENABLE].sysStr) ||
-            oneWifiEnabled || Mesh_GetEnabled("mesh_ovs_enable") ||
+            oneWifiEnabled || wanFailOverEnabled || Mesh_GetEnabled("mesh_ovs_enable") ||
             0 == access( OPENVSWITCH_LOADED, F_OK )))
         {   // mesh_ovs_enable has higher priority over mesh_gre_acc_enable,
             // therefore when ovs is enabled, disable gre acc.
@@ -3385,7 +3387,7 @@ bool Mesh_SetOVS(bool enable, bool init, bool commitSyscfg)
                 MeshError("Failed to disable Opensync\n");
             }
         }
-        enable = enable || oneWifiEnabled;
+        enable = enable || oneWifiEnabled || wanFailOverEnabled;
         g_pMeshAgent->OvsEnable = enable;
 
         //Send this as an RFC update to plume manager
@@ -3518,7 +3520,7 @@ bool Opensync_Set(bool enable, bool init, bool commitSyscfg) {
             MeshError("Unable to %s Opensync\n", enable?"enable":"disable");
 	    return false;
         }
-        enable = enable || oneWifiEnabled;
+        enable = enable || oneWifiEnabled || wanFailOverEnabled;
         g_pMeshAgent->OpensyncEnable = enable;
         //Send this as an RFC update to plume manager
         if(enable) {
@@ -6079,6 +6081,9 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     // MeshInfo("Entering into %s\n",__FUNCTION__);
     oneWifiEnabled = (0 == access( ONEWIFI_ENABLED, F_OK ))? true:false;
     MeshInfo("oneWifi is %s \n", oneWifiEnabled? "enabled" : "disabled");
+
+    wanFailOverEnabled = (access(WFO_ENABLED, F_OK) == 0 )? true:false;
+    MeshInfo("wanFailOver is %s \n", wanFailOverEnabled? "enabled" : "disabled");
     // Create our message server thread
     thread_status = pthread_create(&mq_server_tid, NULL, msgQServer, NULL);
     if (thread_status == 0)
