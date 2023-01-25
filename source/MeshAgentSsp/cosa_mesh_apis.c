@@ -3389,7 +3389,7 @@ int get_sta_active_interface_name()
     bool conn_status;
     wifi_connection_status_t connect_status;
     const unsigned char *temp_buff;
-    char *pStrVal = NULL;
+    const unsigned char *name = NULL;
 
     pInputParam[numOfInputParams] = first_arg;
     numOfInputParams = 1;
@@ -3398,12 +3398,20 @@ int get_sta_active_interface_name()
     if(RBUS_ERROR_SUCCESS == rc) {
         rbusProperty_t next = outputVals;
         for (i = 0; i < numOfOutVals; i++) {
+            name = NULL;
             rbusValue_t val = rbusProperty_GetValue(next);
             rbusValueType_t type = rbusValue_GetType(val);
             MeshInfo ("Parameter %2d:\n\r", i+1);
             if(type == RBUS_BYTES) {
                 temp_buff = rbusValue_GetBytes(val, &len);
-                sscanf(rbusProperty_GetName(next),RBUS_STA_STATUS_INDEX, &index);
+                name = rbusProperty_GetName(next);
+                if(strstr(name,"Connection.Status") == NULL) {
+                    MeshInfo ("Skip Parameter Name: %s\n", name);
+                    next = rbusProperty_GetNext(next);
+                    continue;
+                }
+                MeshInfo ("Checking Parameter Name: %s\n", name);
+                sscanf(name, RBUS_STA_STATUS_INDEX, &index);
                 if (temp_buff == NULL) {
                     MeshError("%s:%d Rbus get string failure len=%d\n", __FUNCTION__, __LINE__, len);
                     return -1;
@@ -3421,22 +3429,9 @@ int get_sta_active_interface_name()
                     else
                         MeshInfo("%s skipping sta because ethbhaul is enabled\n",__FUNCTION__);
 #endif
-                } else {
-                    changeStaState(false);
-                    MeshInfo("%s:%d: Station is not connected\r\n",__func__, __LINE__);
+                    break;
                 }
             }
-            else if(type == RBUS_STRING) {
-                pStrVal = rbusValue_ToString(val,NULL,0);
-                MeshInfo("              Name  : %s\n\r", rbusProperty_GetName(next));
-                MeshInfo("              Type  : %d\n\r", type);
-                MeshInfo("              Value : %s\n\r", pStrVal);
-
-                if(pStrVal) {
-                    free(pStrVal);
-                }
-            }
-
             next = rbusProperty_GetNext(next);
         }
         /* Free the memory */
