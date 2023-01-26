@@ -171,12 +171,6 @@
                                     <writable>true</writable>
                                 </parameter>
                                 <parameter>
-                                    <name>ExtEthPortEnable</name>
-                                    <type>boolean</type>
-                                    <syntax>bool</syntax>
-                                    <writable>true</writable>
-                                </parameter>
-                                <parameter>
                                     <name>Opensync</name>
                                     <type>boolean</type>
                                     <syntax>bool</syntax>

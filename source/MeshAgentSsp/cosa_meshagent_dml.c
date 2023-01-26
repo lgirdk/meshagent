@@ -189,20 +189,6 @@ MeshAgent_GetParamBoolValue
 	return TRUE;
     }
 
-    if (strcmp(ParamName, "ExtEthPortEnable") == 0)
-    {
-#ifdef RDKB_EXTENDER_ENABLED
-        MeshInfo("ExtEthPortEnable Enable get\n");
-        *pBool = g_pMeshAgent->ExtEthPortEnable;        
-#else
-        MeshInfo("ExtEthPortEnable Unsupported platform\n");
-        *pBool = false;
-#endif
-        return TRUE;
-    }
-
-    
-
     MeshWarning(("Unsupported parameter '%s'\n"), ParamName);
 
     return FALSE;
@@ -681,17 +667,6 @@ MeshAgent_SetParamBoolValue
     {
         MeshInfo("Opensync set\n");
         Opensync_Set(bValue,false,true);
-        return TRUE;
-    }
-
-    if (strcmp(ParamName, "ExtEthPortEnable") == 0)
-    {
-#ifdef RDKB_EXTENDER_ENABLED
-        MeshInfo("ExtEthPortEnable set\n");
-        Mesh_SetMeshXleEthBhaul(bValue,false,true);
-#else
-        MeshInfo("ExtEthPortEnable set unsupported\n");
-#endif
         return TRUE;
     }
 

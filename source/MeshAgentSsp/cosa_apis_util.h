@@ -123,6 +123,5 @@ void  led_state(eLedColor color,eLedAnimation animation);
 #endif
 #if defined(ONEWIFI)
 void  handle_led_status(eMeshSyncStatus status);
-bool Mesh_SetMeshXleEthBhaul(bool enable, bool init, bool commitSyscfg);
 #endif
 #endif /* MESHAGENT_SOURCE_MESHAGENT_MESHUTILS_H_ */
