@@ -110,6 +110,7 @@ const int MAX_MESSAGES=10;  // max number of messages the can be in the queue
 #define STATE_DOWN "Down"
 #define STATE_FALSE "false"
 #define LS_READ_TIMEOUT_MS 2000
+#define ETH_EBHAUL  "ethpod"
 
 #define OVS_ENABLED    "/sys/module/openvswitch"
 
@@ -2602,7 +2603,9 @@ bool Mesh_ExtenderBridge(char *ifname)
         Mesh_vlan_network(ifname);
 #endif
     }
-    Mesh_ext_create_lanVlans(ifname);
+    if (strncmp(ETH_EBHAUL,ifname,(sizeof(ETH_EBHAUL)- 1)) != 0)
+        Mesh_ext_create_lanVlans(ifname);
+
     return status;
 }
 #endif
