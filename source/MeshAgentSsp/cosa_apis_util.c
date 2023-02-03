@@ -254,7 +254,7 @@ int svcagt_set_service_restart (const char *svc_name)
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
 int nif_ioctl(int cmd, void *buf)
 {
-    static int fd = -1;
+    int fd = -1;
     int rc;
     int retval = 0;
     if (fd < 0)
@@ -272,6 +272,7 @@ int nif_ioctl(int cmd, void *buf)
     {
         retval = errno;
     }
+    close(fd);
 
     return retval;
 }
@@ -294,7 +295,7 @@ int nif_ifreq(int cmd, char *ifname, struct ifreq *req)
        {
            break;
        }
-       MeshError("cmd: %d, %s\n",cmd,strerror(errno));
+       MeshError("ioctl: ifname: %s,cmd: %d, %s\n",req->ifr_name,cmd,strerror(errno));
        sleep(1);
     }
     return rc;
@@ -374,6 +375,10 @@ bool get_ipaddr_subnet(char * ifname, char *local_ip, char * remote_ip)
     int i;
     os_ipaddr_t ipaddr,subnet;
     bool ret = true;
+
+    memset(&ipaddr, 0, sizeof(os_ipaddr_t));
+    memset(&subnet, 0, sizeof(os_ipaddr_t));
+
     MeshInfo("get_ipaddr_subnet: start\n");
     if (nif_ipaddr_get(ifname, &ipaddr))
     {
@@ -389,7 +394,7 @@ bool get_ipaddr_subnet(char * ifname, char *local_ip, char * remote_ip)
             if(snprintf(local_ip,MAX_IP_LEN , PRI(os_ipaddr_t), FMT(os_ipaddr_t, ipaddr)))
                 MeshInfo("%s: if_name[%s] local ip addr[%s]\n", __func__, ifname,local_ip);
             if(snprintf(remote_ip,MAX_IP_LEN , PRI(os_ipaddr_t), FMT(os_ipaddr_t, subnet)))
-               MeshInfo("%s: if_name[%s] remote ip addr[%s]\n", __func__, ifname,remote_ip);
+                MeshInfo("%s: if_name[%s] remote ip addr[%s]\n", __func__, ifname,remote_ip);
         }
     }
     else
@@ -476,7 +481,7 @@ bool udhcpc_stop(char* ifname)
     MeshInfo("udhcpc_stop is called %s\n", ifname);
     if (pid <= 0)
     {
-        MeshInfo("DHCP client not running::ifname=%s", ifname);
+        MeshInfo("DHCP client not running::ifname=%s\n", ifname);
         return true;
     }
 
@@ -502,13 +507,15 @@ int handle_uplink_bridge(char *ifname, char * bridge_ip, char *pod_addr, bool cr
 
     if(create)
     {
-        MeshDebug("Entering %s with ifname = %s, bridge_ip = %s, pod_addr = %s,\n", __FUNCTION__, ifname, bridge_ip, pod_addr);
+        MeshInfo("Entering %s with ifname = %s, bridge_ip = %s, pod_addr = %s,\n", __FUNCTION__, ifname, bridge_ip, pod_addr);
+
         rc = v_secure_system("/usr/bin/ovs-vsctl del-br %s", MESH_BHAUL_BRIDGE);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
             MeshWarning("Failed to remove bridge %s\n",MESH_BHAUL_BRIDGE);
         }
 
+        MeshInfo("ip link add g-%s type gretap local %s remote %s dev %s tos 1\n", ifname, bridge_ip, pod_addr, ifname);
 	rc = v_secure_system("ip link add g-%s type gretap local %s remote %s dev %s tos 1", ifname, bridge_ip, pod_addr, ifname);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
@@ -516,31 +523,35 @@ int handle_uplink_bridge(char *ifname, char * bridge_ip, char *pod_addr, bool cr
             return -1;
         }
 
+        MeshInfo("/sbin/ifconfig g-%s up\n", ifname);
         rc = v_secure_system("/sbin/ifconfig g-%s up", ifname);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
-            MeshError("Failed to bring g-%s up", ifname);
+            MeshError("Failed to bring g-%s up\n", ifname);
             return -1;
         }
 
+        MeshInfo("/usr/bin/ovs-vsctl add-br %s\n",GATEWAY_FAILOVER_BRIDGE);
         rc = v_secure_system("/usr/bin/ovs-vsctl add-br %s",GATEWAY_FAILOVER_BRIDGE);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
-            MeshError("Failed to add bridge %s", GATEWAY_FAILOVER_BRIDGE);
+            MeshError("Failed to add bridge %s\n", GATEWAY_FAILOVER_BRIDGE);
             return -1;
         }
 
+        MeshInfo("/usr/bin/ovs-vsctl add-port %s g-%s\n",GATEWAY_FAILOVER_BRIDGE,ifname);
         rc = v_secure_system("/usr/bin/ovs-vsctl add-port %s g-%s",GATEWAY_FAILOVER_BRIDGE,ifname);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
-            MeshError("Failed to add g-%s to bridge %s", ifname, GATEWAY_FAILOVER_BRIDGE);
+            MeshError("Failed to add g-%s to bridge %s\n", ifname, GATEWAY_FAILOVER_BRIDGE);
             return -1;
         }
 
+        MeshInfo("/sbin/ifconfig %s  up\n", GATEWAY_FAILOVER_BRIDGE);
         rc = v_secure_system("/sbin/ifconfig %s  up", GATEWAY_FAILOVER_BRIDGE);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
-            MeshError("Failed to bring %s up", GATEWAY_FAILOVER_BRIDGE);
+            MeshError("Failed to bring %s up\n", GATEWAY_FAILOVER_BRIDGE);
             return -1;
         }
     }

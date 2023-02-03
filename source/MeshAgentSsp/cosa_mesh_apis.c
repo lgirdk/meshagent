@@ -3222,7 +3222,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         //Handle External Gateway Present
         is_gateway_present = rbusValue_GetBoolean(value);
         gateway_present = is_gateway_present?1:0;
-        MeshInfo("ExternalGatewayPresent  = %d",gateway_present);
+        MeshInfo("ExternalGatewayPresent  = %d\n",gateway_present);
 	if(gateway_present == AP_ACTIVE)
 	{
             handle_uplink_bridge(NULL, NULL, NULL, false);
@@ -3271,7 +3271,10 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 	if ((gateway_present == STA_ACTIVE))
         {
             if(sta_connect_status)
+            {
+                MeshInfo("Starting thread to create brSTA uplink, ExternalGatewayPresent = %d\n",gateway_present);
 	        pthread_create(&tid_handle, NULL, uplinkHandleFunction,NULL);
+            }
 	    else
 	    {
 		if(is_uplink_tid_exist)
