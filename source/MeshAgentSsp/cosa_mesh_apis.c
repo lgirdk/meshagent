@@ -3430,11 +3430,6 @@ static void Mesh_ModifyPodTunnel(MeshTunnelSet *conf)
 
     ovs_request.table_config.table.id = OVS_GW_CONFIG_TABLE;
 
-    if (!ovs_agent_api_init(OVS_MESH_AGENT_COMPONENT_ID)) {
-     MeshError("%s: Failed to init the API framework\n", __FUNCTION__);
-     return;
-    }
-
     if (!ovs_agent_api_get_config(OVS_GW_CONFIG_TABLE, (void **)&pGwConfig))
      {
         MeshError("%s failed to allocate and initialize config\n", __FUNCTION__);
@@ -3453,8 +3448,6 @@ static void Mesh_ModifyPodTunnel(MeshTunnelSet *conf)
         MeshError("%s Mesh OVS interact failed ifname:%s bridge:%s\n",__FUNCTION__, conf->ifname, conf->bridge);
      }
 
-    ovs_agent_api_deinit();
-
 #else
     UNREFERENCED_PARAMETER(conf);
     MeshInfo("%s: OVSAgent is not integrated in this platform yet\n", __FUNCTION__);
@@ -3470,11 +3463,6 @@ static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf)
     ovs_request.operation = OVS_INSERT_OPERATION;
     ovs_request.block_mode = OVS_ENABLE_BLOCK_MODE;
     ovs_request.table_config.table.id = OVS_GW_CONFIG_TABLE;
-
-    if (!ovs_agent_api_init(OVS_MESH_AGENT_COMPONENT_ID)) {
-     MeshError("%s: Failed to init the API framework\n", __FUNCTION__);
-     return;
-    }
 
     if (!ovs_agent_api_get_config(OVS_GW_CONFIG_TABLE, (void **)&pGwConfig))
     {
@@ -3497,8 +3485,6 @@ static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf)
      } else {
       MeshError("%s Mesh OVS interact failed ifname:%s bridge:%s\n",__FUNCTION__, conf->ifname, conf->bridge);
      }
-
-    ovs_agent_api_deinit();
 #else
     UNREFERENCED_PARAMETER(conf);
     MeshInfo("%s: OVSAgent is not integrated in this platform yet\n", __FUNCTION__);
@@ -6234,10 +6220,51 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
 #endif
 #endif
     subscribeSpeedTestStatus();
+
+#ifdef MESH_OVSAGENT_ENABLE
+    if (!ovs_agent_api_init(OVS_MESH_AGENT_COMPONENT_ID))
+    {
+        MeshError("%s: Failed to init the OvsAgentApi\n", __FUNCTION__);
+        status = -1;
+    }
+#else
+    MeshInfo("%s: OvsAgentApi is not integrated in this platform yet\n", __FUNCTION__);
+#endif
+
     // MeshInfo("Exiting from %s\n",__FUNCTION__);
     return status;
 }
 
+/**
+ *  @brief Mesh Agent Deinitialize code
+ *
+ *  This function will deinitialize the Mesh Agent and destroy any resources setup previously.
+ *
+ *  @return 0
+ */
+static int Mesh_Deinit(ANSC_HANDLE hThisObject)
+{
+    int status = 0;
+
+    PCOSA_DATAMODEL_MESHAGENT pMyObject = (PCOSA_DATAMODEL_MESHAGENT) hThisObject;
+    if (!pMyObject)
+    {
+        MeshWarning("%s Datamodel object is NULL\n",__FUNCTION__);
+    }
+
+#ifdef MESH_OVSAGENT_ENABLE
+    if (!ovs_agent_api_deinit())
+    {
+        MeshError("%s: Failed to deinit the OvsAgentApi\n", __FUNCTION__);
+        status = -1;
+    }
+#else
+    MeshInfo("%s: OvsAgentApi is not integrated in this platform yet\n", __FUNCTION__);
+#endif
+
+    // MeshInfo("Exiting from %s\n",__FUNCTION__);
+    return status;
+}
 
 ANSC_STATUS
 CosaDmlMeshAgentInit
@@ -6261,5 +6288,26 @@ CosaDmlMeshAgentInit
     return ANSC_STATUS_SUCCESS;
 }
 
+ANSC_STATUS
+CosaDmlMeshAgentDeinit
+    (
+        ANSC_HANDLE                 hThisObject
+    )
+{
+    int res;
+    MeshInfo("Deinitialize MeshAgent\n");
+
+    // Ensure meshwifi service not started before deinit done
+    pthread_mutex_lock(&mesh_handler_mutex);
+    res = Mesh_Deinit(hThisObject);
+    pthread_mutex_unlock(&mesh_handler_mutex);
+    if (res != 0)
+    {
+        MeshError("Mesh Agent Deinitialization failed\n");
+        return ANSC_STATUS_FAILURE;
+    }
+    MeshInfo("MeshAgent Deinitialized\n");
+    return ANSC_STATUS_SUCCESS;
+}
 
 #endif

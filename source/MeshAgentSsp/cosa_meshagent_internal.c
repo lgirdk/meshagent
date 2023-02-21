@@ -49,8 +49,7 @@ CosaMeshAgentCreate
         VOID
     )
 {
-	
-	PCOSA_DATAMODEL_MESHAGENT       pMyObject    = (PCOSA_DATAMODEL_MESHAGENT)NULL;
+    PCOSA_DATAMODEL_MESHAGENT       pMyObject    = (PCOSA_DATAMODEL_MESHAGENT)NULL;
 
     /*
      * We create object by first allocating memory for holding the variables and member functions.
@@ -59,7 +58,7 @@ CosaMeshAgentCreate
 
     if ( !pMyObject )
     {
-    	MeshInfo("%s exit ERROR \n", __FUNCTION__);
+        MeshInfo("%s exit ERROR \n", __FUNCTION__);
         return  (ANSC_HANDLE)NULL;
     }
 
@@ -76,17 +75,13 @@ CosaMeshAgentInitialize
     ANSC_STATUS                     returnStatus        = ANSC_STATUS_SUCCESS;
 
     returnStatus = CosaDmlMeshAgentInit(hThisObject);
-    
     if ( returnStatus != ANSC_STATUS_SUCCESS )
     {
-
-	MeshInfo("%s Exit ERROR \n", __FUNCTION__);
-        return  returnStatus;
+        MeshInfo("%s Exit ERROR \n", __FUNCTION__);
     }
-    
+
     return returnStatus;
 }
-
 
 ANSC_STATUS
 CosaMeshAgentRemove
@@ -95,12 +90,18 @@ CosaMeshAgentRemove
     )
 {
     ANSC_STATUS                     returnStatus = ANSC_STATUS_SUCCESS;
-    PCOSA_DATAMODEL_MESHAGENT            pMyObject    = (PCOSA_DATAMODEL_MESHAGENT)hThisObject;
+    PCOSA_DATAMODEL_MESHAGENT       pMyObject    = (PCOSA_DATAMODEL_MESHAGENT)hThisObject;
+
+    returnStatus = CosaDmlMeshAgentDeinit(hThisObject);
+    if ( returnStatus != ANSC_STATUS_SUCCESS )
+    {
+        MeshInfo("%s Exit ERROR \n", __FUNCTION__);
+    }
 
     /* Remove self */
     AnscFreeMemory((ANSC_HANDLE)pMyObject);
     MeshInfo("%s EXIT \n", __FUNCTION__);
 
-	return returnStatus;
+    return returnStatus;
 }
 

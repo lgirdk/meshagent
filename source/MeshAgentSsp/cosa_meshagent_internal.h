@@ -43,7 +43,7 @@ _COSA_DATAMODEL_MESHAGENT
 COSA_DATAMODEL_MESHAGENT,  *PCOSA_DATAMODEL_MESHAGENT;
 
 /*
-    Standard function declaration 
+    Standard function declaration
 */
 ANSC_HANDLE
 CosaMeshAgentCreate
@@ -62,11 +62,17 @@ CosaMeshAgentRemove
     (
         ANSC_HANDLE                 hThisObject
     );
-    
+
 ANSC_STATUS
 CosaDmlMeshAgentInit
     (
         ANSC_HANDLE                 hThisObject
     );
 
-#endif 
+ANSC_STATUS
+CosaDmlMeshAgentDeinit
+    (
+        ANSC_HANDLE                 hThisObject
+    );
+
+#endif
