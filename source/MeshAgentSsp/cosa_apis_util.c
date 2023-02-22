@@ -61,6 +61,7 @@ LedColor_Msg  meshLedColorArr[] = {
 #define CONTROLLER_CONNECTING         "3"
 #define CONTROLLER_CONNECT_FAILURE    "4"
 #define STA_DISCONNECTED              "19"
+#define UNIT_ACTIVATED_SYSCFG         "unit_activated"
 #endif
 extern int sysevent_fd_gs;
 extern token_t sysevent_token_gs;
@@ -677,6 +678,14 @@ void  handle_led_status(eMeshSyncStatus status)
         case MESH_STA_CONNECTED:
             if(ctr_status == true)
                 led_state(OFF,SOLID);
+            break;
+        case MESH_MQTT_RECVD:
+            MeshInfo("MQTT is recvd, turn of BLE\n");
+            if(Mesh_SysCfgSetStr(UNIT_ACTIVATED_SYSCFG, "1", true) != 0) {
+                MeshInfo("Failed to set the unit_activated in syscfg\n");
+            } else {
+                MeshInfo("Set the unit_activated in syscfg success\n");
+            }
             break;
         default:
             break;
