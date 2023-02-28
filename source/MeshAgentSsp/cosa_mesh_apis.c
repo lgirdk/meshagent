@@ -2249,30 +2249,34 @@ static BOOL radio_check(void)
             {
                 radioDown = 1;
             }
-            else
+            rc = strcmp_s(state,strlen(state),valStructs[1]->parameterValue,&ind);
+            ERR_CHK(rc);
+            if ((ind ==0 ) && (rc == EOK))
             {
-                rc = strcmp_s(state,strlen(state),valStructs[1]->parameterValue,&ind);
-                ERR_CHK(rc);
-                if ((ind ==0 ) && (rc == EOK)) 
-		{
-		    radioDown = 1;
-		}
-			
-	    }
+		radioDown += 1;
+            }
 	
     }
 	
-    if(radioDown)
-        MeshError("Radio Error: Status 2.4= %s 5= %s \n", valStructs[0]->parameterValue, valStructs[1]->parameterValue);
+    if(radioDown==2)
+    {
+        MeshError("Both radios are down: Status 2.4= %s 5= %s \n", valStructs[0]->parameterValue, valStructs[1]->parameterValue);
+    }
     else
-         ret_b=(valStructs?true:false);
+    {
+        if(radioDown)
+        {
+            MeshWarning("One radio is off: Status 2.4= %s 5= %s \n", valStructs[0]->parameterValue, valStructs[1]->parameterValue);
+        }
+        ret_b=(valStructs?true:false);
+    }
 
     if(valStructs)
-     MeshWarning("valStructs[0]->parameterValue = %s valStructs[1]->parameterValue = %s \n",valStructs[0]->parameterValue,valStructs[1]->parameterValue);
+     MeshWarning("%s : valStructs[0]->parameterValue = %s valStructs[1]->parameterValue = %s \n", __FUNCTION__, valStructs[0]->parameterValue,valStructs[1]->parameterValue);
 
     free_parameterValStruct_t(bus_handle, valNum, valStructs);
     if(!ret_b) {
-      MeshError(("MESH_ERROR:Fail to enable Mesh because either one of the radios are off\n"));
+      MeshError(("MESH_ERROR:Fail to enable Mesh because both radios are off\n"));
       t2_event_d("WIFI_ERROR_MESH_FAILED", 1);
     }
 
