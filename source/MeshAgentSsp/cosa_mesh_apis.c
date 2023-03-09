@@ -213,6 +213,8 @@ rbusHandle_t handle;
 static bool meshWANStatus = false;
 static char *meshWANIfname = NULL;
 static bool rbusSubscribed = false;
+bool get_wan_bridge();
+bool get_eth_interface(char * eth_interface);
 
 rbusError_t rbusGetStringHandler(rbusHandle_t handle, rbusProperty_t property, rbusGetHandlerOptions_t* opts);
 rbusError_t rbusGetBoolHandler(rbusHandle_t handle, rbusProperty_t property, rbusGetHandlerOptions_t* opts);
@@ -1011,6 +1013,11 @@ static int Mesh_CreateEthTunnel(int PodIdx, const char * bridge_ip, const char *
 int Mesh_EthBhaulPodVlanSetup(int PodIdx, bool isOvsMode)
 {
     int rc = -1;
+#ifdef WAN_FAILOVER_SUPPORTED
+    char ethports[ETH_IFNAME_MAX_LEN] = {0};
+    char * context = NULL;
+    char *tok_ethport = NULL;
+#endif
 
     MeshDebug("Entering %s with PodIdx = %d, and isOvsMode = %s\n", __FUNCTION__, PodIdx, (isOvsMode ? "true" : "false"));
 
@@ -1066,7 +1073,27 @@ int Mesh_EthBhaulPodVlanSetup(int PodIdx, bool isOvsMode)
         MeshError("Failed to add port (ethpod%d.%d) to LNF bridge (%s)\n", PodIdx, LNF_VLAN, (isPaceXF3 ? LNF_BR_XF3 : LNF_BR));
         return rc;
     }
+#ifdef WAN_FAILOVER_SUPPORTED
+  //In case of ethernet gre creation in gateway, we will not be adding
+  // vlan 200 gre on brRWAN and hence explicitly we need to create bridge here,
 
+    if (get_eth_interface(ethports))
+        MeshInfo("Eth ports are :%s\n", ethports);
+
+    if (get_wan_bridge())
+        MeshInfo("Mesh Wan interface :%s\n", meshWANIfname);
+
+    rc = v_secure_system("ovs-vsctl add-br %s",meshWANIfname);
+    rc = v_secure_system("ifconfig %s up",meshWANIfname);
+    tok_ethport = strtok_r (ethports, " ",&context);
+    while (tok_ethport != NULL){
+        rc = v_secure_system("vconfig add %s %d",tok_ethport,MESH_EXTENDER_VLAN);
+        rc = v_secure_system("ifconfig %s.%d up",tok_ethport,MESH_EXTENDER_VLAN);
+        MeshInfo("Bridge : port %s.%d is added to %s\n",tok_ethport,MESH_EXTENDER_VLAN,meshWANIfname);
+        rc = v_secure_system("ovs-vsctl add-port %s %s.%d",meshWANIfname,tok_ethport,MESH_EXTENDER_VLAN);
+        tok_ethport = strtok_r(NULL, " ",&context);
+    }
+#endif
     return 0;
 }
 
@@ -2209,6 +2236,35 @@ get_wan_bridge()
     }
     return ret;
 }
+
+bool
+get_eth_interface(char * eth_interface)
+{
+    char *val = NULL;
+    int ret = false;
+    int len = 0;
+
+    if (eth_interface == NULL)
+    {
+        MeshError(("eth_interface = NULL\n"));
+        return false;
+    }
+
+    if (PSM_Get_Record_Value2(bus_handle, g_Subsystem,
+                MESH_ETH_INTERFACE, NULL, &val) == CCSP_SUCCESS)
+    {
+        if(val) {
+            len = strlen(val);
+            if(len > 0)
+            {
+                snprintf(eth_interface, ETH_IFNAME_MAX_LEN, "%s", val);
+                ((CCSP_MESSAGE_BUS_INFO *)bus_handle)->freefunc(val);
+                ret = true;
+            }
+        }
+    }
+    return ret;
+}
 #endif
 
 BOOL is_bridge_mode_enabled()
@@ -2587,32 +2643,59 @@ bool Mesh_ExtenderBridge(char *ifname)
     bool status = true;
     MeshTunnelSetVlan data;
     bool ret = false;
-    char vlan_ifname[64];
+    bool bIsethpod = true;
+    char vlan_ifname[MAX_IFNAME_LEN] = {0};
+    int rc = -1;
+
     memset(&data, 0, sizeof(MeshTunnelSetVlan));
 
     //rbus call for bridge name from dmsb.Mesh.WAN.Interface.Name
     ret = get_wan_bridge();
-    if (ret)
-    {
-        //Send the bridge config to OvsAgent
-        snprintf(vlan_ifname, sizeof(vlan_ifname),
-                      "%s.%d", ifname, MESH_EXTENDER_VLAN);
-        strncpy(data.ifname,  vlan_ifname,sizeof(data.ifname));
-        strncpy(data.parent_ifname, ifname,sizeof(data.parent_ifname));
-        strncpy(data.bridge, meshWANIfname,sizeof(data.bridge));
-        data.vlan = MESH_EXTENDER_VLAN;
 
-        Mesh_ModifyPodTunnelVlan(&data);
-    }
-    else
+    rc = v_secure_system("ovs-vsctl set bridge %s stp_enable=true",meshWANIfname);
+    if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+        MeshWarning("Unable to set stp to WAN backup bridge\n");
+
+    if (strncmp(ETH_EBHAUL,ifname,(sizeof(ETH_EBHAUL)- 1)) != 0)
+        bIsethpod=false;
+
+    if (ret && !bIsethpod)
     {
-	status = false;
-        MeshError("get_wan_bridge get failed \n");
+    //Send the bridge config to OvsAgent
+        if( strstr(ifname, MESH_ETHPORT) )
+        {
+            char ifname_name[MAX_IFNAME_LEN] = {0};
+            char * ethportname = NULL;
+            char *context = NULL;
+
+            strncpy(ifname_name,ifname,MAX_IFNAME_LEN);
+            strtok_r(ifname_name, "-", &context);
+            ethportname = strtok_r(NULL, ".", &context);
+            MeshInfo("Ethernet port is %s \n",ethportname);
+            snprintf(vlan_ifname, sizeof(vlan_ifname),
+                     "%s.%d", ethportname, MESH_EXTENDER_VLAN);
+            strncpy(data.parent_ifname, ethportname,sizeof(data.parent_ifname));
+        }
+        else
+        {
+           snprintf(vlan_ifname, sizeof(vlan_ifname),
+                     "%s.%d", ifname, MESH_EXTENDER_VLAN);
+           strncpy(data.parent_ifname, ifname,sizeof(data.parent_ifname));
+        }
+        strncpy(data.bridge, meshWANIfname,sizeof(data.bridge));
+        strncpy(data.ifname,  vlan_ifname,sizeof(data.ifname));
+        data.vlan = MESH_EXTENDER_VLAN;
+        Mesh_ModifyPodTunnelVlan(&data);
+    } else {
+        if(!ret) {
+	    status = false;
+            MeshError("get_wan_bridge get failed \n");
+        }
     }
 
     if(!strcmp( ifname, ETHBACKHAUL0_VLAN) || !strcmp( ifname, ETHBACKHAUL1_VLAN))
     {
-        int rc = v_secure_system("ethtool -K %s sg off",ifname);
+       rc = v_secure_system("ethtool -K %s sg off",ifname);
         if(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
         {
             MeshError("Failed to run ethtool -K %s sg off \n",ifname);
@@ -2622,7 +2705,7 @@ bool Mesh_ExtenderBridge(char *ifname)
       Mesh_vlan_network(ifname);
 #endif
     }
-    if (strncmp(ETH_EBHAUL,ifname,(sizeof(ETH_EBHAUL)- 1)) != 0)
+    if (!bIsethpod)
         Mesh_ext_create_lanVlans(ifname);
 
     return status;
