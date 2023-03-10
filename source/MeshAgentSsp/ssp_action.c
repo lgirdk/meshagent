@@ -26,6 +26,7 @@
 #include "ssp_global.h"
 #include "dslh_dmagnt_interface.h"
 #include "ccsp_trace.h"
+#include "dm_pack_create_func.h"
 #include "meshagent.h"
 #include "safec_lib_common.h"
 
@@ -165,7 +166,6 @@ ANSC_STATUS ssp_engage(PCCSP_COMPONENT_CFG pMeshCfg)
 {
 	ANSC_STATUS	returnStatus = ANSC_STATUS_SUCCESS;
     PCCC_MBI_INTERFACE pSsdMbiIf = (PCCC_MBI_INTERFACE)MsgHelper_CreateCcdMbiIf((void*)bus_handle, g_Subsystem);
-	PCCSP_DM_XML_CFG_LIST pXmlCfgList = NULL;
     char CrName[256];
 
     g_pComponent_COMMON->Health = CCSP_COMMON_COMPONENT_HEALTH_Yellow;
@@ -186,19 +186,12 @@ ANSC_STATUS ssp_engage(PCCSP_COMPONENT_CFG pMeshCfg)
         _ansc_sprintf(CrName, "%s", CCSP_DBUS_INTERFACE_CR);
     }
   
-	returnStatus = CcspComponentLoadDmXmlList(pMeshCfg->DmXmlCfgFileName, &pXmlCfgList);
-    if ( returnStatus != ANSC_STATUS_SUCCESS )
-    {   
-    	CcspTraceWarning(("Failed while loading MeshAgent Data MOdel returnStatus = %lu\n",returnStatus));
-        return  returnStatus;
-    }	
-
     returnStatus =
-        pDslhCpeController->RegisterCcspDataModel
+        pDslhCpeController->RegisterCcspDataModel2
             (
                 (ANSC_HANDLE)pDslhCpeController,
                 CrName,                            /* CCSP_DBUS_INTERFACE_CR, CCSP CR ID */
-				pXmlCfgList->FileList[0],          /* Data Model XML file. Can be empty if only base data model supported. */
+                DMPackCreateDataModelXML,          /* Comcast generated code to create XML. */
                 pMeshCfg->ComponentName,           /* Component Name    */
                 pMeshCfg->Version,                 /* Component Version */
                 pMeshCfg->DbusPath,                /* Component Path    */
@@ -222,7 +215,6 @@ ANSC_STATUS ssp_engage(PCCSP_COMPONENT_CFG pMeshCfg)
 
     }
 	
-	AnscFreeMemory(pXmlCfgList);
     return ANSC_STATUS_SUCCESS;
 }
 
