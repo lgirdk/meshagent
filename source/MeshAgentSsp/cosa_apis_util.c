@@ -43,6 +43,7 @@ extern MeshStaStatus_node sta;
 
 #if defined(ONEWIFI)
 extern MeshSync_MsgItem meshSyncMsgArr[];
+static bool is_connected_via_eth = false;
 #ifndef RDK_LED_MANAGER_EXIST
 LedAnimation_Msg  meshLedAnimationArr[] = {
     {SOLID,                            "SOLID"},
@@ -583,6 +584,11 @@ void  led_state(eLedColor color,eLedAnimation animation)
 }
 #endif
 
+bool is_eth_connected()
+{
+    return is_connected_via_eth;
+}
+
 /**
  * @brief Mesh Agent control led
  *
@@ -601,7 +607,13 @@ void  handle_led_status(eMeshSyncStatus status)
 
     switch (status)
     {
-        case MESH_CONTROLLER_CONNECTED:
+        case MESH_CONTROLLER_CONNECTED_VIA_EBH:
+        case MESH_CONTROLLER_CONNECTED_VIA_WBH: 
+            if (status == MESH_CONTROLLER_CONNECTED_VIA_EBH)
+               is_connected_via_eth = true;
+            else
+               is_connected_via_eth = false;
+
             ctr_status = true;
             MeshInfo("Led Off, Controller connected\n");
 #ifndef RDK_LED_MANAGER_EXIST

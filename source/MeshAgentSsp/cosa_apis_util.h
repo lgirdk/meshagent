@@ -39,7 +39,8 @@
 #define      GATEWAY_FAILOVER_BRIDGE  "brSTA"
 #define      MESH_BHAUL_BRIDGE        "br403"
 #define      MESH_XLE_BRIDGE          "br-home"
-#define      ETHBACKHAUL_VLAN         "g-eth0.123"
+#define      ETHBACKHAUL0_VLAN        "g-eth0.123"
+#define      ETHBACKHAUL1_VLAN        "g-eth1.123"
 
 #ifndef RDK_LED_MANAGER_EXIST
 typedef enum {
@@ -121,5 +122,6 @@ void  led_state(eLedColor color,eLedAnimation animation);
 #endif
 #if defined(ONEWIFI)
 void  handle_led_status(eMeshSyncStatus status);
+bool is_eth_connected();
 #endif
 #endif /* MESHAGENT_SOURCE_MESHAGENT_MESHUTILS_H_ */

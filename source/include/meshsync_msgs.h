@@ -123,6 +123,8 @@ typedef enum {
     MESH_BRHOME_IP,
     MESH_TRIGGER_DISASSOC,
 #endif
+    MESH_EBH_STATUS,
+    MESH_EBH_INFO,
     MESH_SYNC_MSG_TOTAL
 } eMeshSyncType;
 
@@ -333,7 +335,7 @@ typedef struct _MeshUrlChange {
  * Mesh Sync msg for ethernet mac filter of pod
  */
 typedef struct _MeshEthernetMac {
-    char mac[MAX_MAC_ADDR_LEN];  // mac //Prash
+    char mac[MAX_MAC_ADDR_LEN];  // mac
 } MeshEthMac;
 
 /**
@@ -418,6 +420,10 @@ typedef struct _MeshReducedRetry {
     uint8_t         isenabled;
 } MeshReducedRetry;
 
+typedef struct _MeshEbhStatus {
+    uint8_t     enabled;
+} MeshEbhStatus;
+
 typedef struct _MeshTunnelSet {
     char        ifname[64];
     char        localIp[MAX_IP_LEN];
@@ -471,6 +477,8 @@ typedef enum {
     MESH_STA_DISCONNECTED,
     MESH_STA_CONNECTED,
     MESH_MQTT_RECVD,
+    MESH_CONTROLLER_CONNECTED_VIA_WBH,
+    MESH_CONTROLLER_CONNECTED_VIA_EBH,
     MESH_TOTAL_STATUS
 }eMeshSyncStatus;
 
@@ -530,6 +538,7 @@ typedef struct _MeshSync {
         MeshTriggerDisassociation       triggerStatus;
 #endif
         MeshWifiOffChannelScanEnable    wifiOffChannelScanEnable;
+        MeshEbhStatus                   ebhStatus;
     } data;
 } MeshSync;
 
