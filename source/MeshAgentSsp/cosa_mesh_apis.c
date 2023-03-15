@@ -148,6 +148,10 @@ extern char g_Subsystem[32];
 #define      RBUS_DEVICE_MODE        "Device.X_RDKCENTRAL-COM_DeviceControl.DeviceNetworkingMode"
 #define      RBUS_STA_CONNECT_TIMEOUT "Device.WiFi.STAConnectionTimeout"
 #endif
+#if defined(WAN_FAILOVER_SUPPORTED)
+#define      RBUS_WAN_CURRENT_ACTIVE_INTERFACE "Device.X_RDK_WanManager.CurrentActiveInterface"
+#define      REMOTE_INTERFACE_NAME             "brRWAN"
+#endif //WAN_FAILOVER_SUPPORTED
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
 #define      RBUS_GATEWAY_PRESENT    "Device.X_RDK_GatewayManagement.ExternalGatewayPresent"
 #endif
@@ -165,6 +169,9 @@ typedef enum
     MESH_RBUS_DEVICE_MODE,
     MESH_RBUS_STA_CONNECT_TIMEOUT,
 #endif
+#if defined(WAN_FAILOVER_SUPPORTED)
+    MESH_RBUS_WAN_CURRENT_ACTIVE_INTERFACE,
+#endif //WAN_FAILOVER_SUPPORTED
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
     MESH_RBUS_GATEWAY_PRESENT,
 #endif
@@ -186,6 +193,9 @@ MeshRbusEvent  meshRbusEvent[] = {
     {MESH_RBUS_DEVICE_MODE,                      RBUS_DEVICE_MODE,                     false},
     {MESH_RBUS_STA_CONNECT_TIMEOUT,              RBUS_STA_CONNECT_TIMEOUT,             false},
 #endif
+#if defined(WAN_FAILOVER_SUPPORTED)
+    {MESH_RBUS_WAN_CURRENT_ACTIVE_INTERFACE,     RBUS_WAN_CURRENT_ACTIVE_INTERFACE,    false},
+#endif //WAN_FAILOVER_SUPPORTED
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
     {MESH_RBUS_GATEWAY_PRESENT,                  RBUS_GATEWAY_PRESENT,                 false}
 #endif
@@ -307,7 +317,8 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
 #endif
 #ifdef WAN_FAILOVER_SUPPORTED
     ,
-    {MESH_BACKUP_NETWORK,                   "MESH_BACKUP_NETWORK",                  "mesh_wan_linkstatus"}
+    {MESH_BACKUP_NETWORK,                   "MESH_BACKUP_NETWORK",                  "mesh_wan_linkstatus"},
+    {MESH_WFO_ENABLED,                      "MESH_WFO_ENABLED",                     "mesh_wfo_enabled"}
 #endif
 #ifdef ONEWIFI
     ,
@@ -2668,6 +2679,34 @@ rbusError_t publishRBUSEvent(char* event_name , void *val, rbus_type_t type)
 }
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED)
+void monitor_wfo_state(bool bStatus)
+{
+    if(bStatus)
+    {
+        MeshInfo("Start the Black box log\n");
+    }
+    else
+    {
+        MeshInfo("End Black box log\n");
+    }
+    return;
+}
+void Send_MESH_WFO_ENABLED_Msg(bool bStatus)
+{
+    MeshSync mMsg = {0};
+    static bool previousStatus = 0;
+    if(previousStatus == bStatus)
+    {
+        MeshInfo("skip WFO status update");
+        return;
+    }
+    mMsg.msgType = MESH_WFO_ENABLED;
+    mMsg.data.meshWFOEnabled.isWFOEnabledSet = true;
+    previousStatus = (mMsg.data.meshWFOEnabled.WFOEnabledStatus = bStatus);
+    msgQSend(&mMsg);
+    monitor_wfo_state(bStatus);
+    return;
+}
 /**
  * @brief Mesh rbusGetStringHandler
  *
@@ -3002,6 +3041,11 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
     bool is_connect_timeout;
 #endif
+    if (event->name == NULL)
+    {
+        MeshError("%s:%d Event name is NULL\n",__FUNCTION__, __LINE__);
+        return;
+    }
 
     rbusValue_t value = rbusObject_GetValue(event->data, NULL );
     if(!value)
@@ -3055,7 +3099,17 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         Mesh_sendEbhStatusRequest();
     }
     else
-#endif
+#endif //WAN_FAILOVER_SUPPORTED || RDKB_EXTENDER_ENABLED
+#if defined(WAN_FAILOVER_SUPPORTED)
+    if(strcmp(event->name,RBUS_WAN_CURRENT_ACTIVE_INTERFACE) == 0) //Gateway side alone
+    {
+        const char *CurrentActiveInterface = rbusValue_GetString(value, NULL);
+        MeshInfo("Received RBUS_WAN_CURRENT_ACTIVE_INTERFACE Inter:%s\n",CurrentActiveInterface);
+        monitor_wfo_state( strncmp(CurrentActiveInterface, REMOTE_INTERFACE_NAME,
+                    sizeof(REMOTE_INTERFACE_NAME)) == 0);
+    }
+    else
+#endif //WAN_FAILOVER_SUPPORTED
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
     if (strcmp(event->name,RBUS_GATEWAY_PRESENT) == 0)
     {
@@ -4597,6 +4651,9 @@ static void *Mesh_sysevent_handler(void *data)
     async_id_t mesh_enable_asyncid;
     async_id_t mesh_url_asyncid;
     async_id_t wifi_txRate_asyncid;
+  #ifdef WAN_FAILOVER_SUPPORTED
+    async_id_t mesh_wfo_enabled_asyncid;
+  #endif
 
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_RESET].sysStr,                     TUPLE_FLAG_EVENT);
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_RESET].sysStr,                     &wifi_init_asyncid);
@@ -4647,6 +4704,10 @@ static void *Mesh_sysevent_handler(void *data)
 
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_TXRATE].sysStr,                   TUPLE_FLAG_EVENT);
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_TXRATE].sysStr,                   &wifi_txRate_asyncid);
+#ifdef WAN_FAILOVER_SUPPORTED
+    sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WFO_ENABLED].sysStr,                     TUPLE_FLAG_EVENT);
+    sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WFO_ENABLED].sysStr,                     &mesh_wfo_enabled_asyncid);
+#endif
 
     for (;;)
     {
@@ -6081,6 +6142,28 @@ static void *Mesh_sysevent_handler(void *data)
                     }
                 }
             }
+#if defined(WAN_FAILOVER_SUPPORTED)
+            else if (ret_val == MESH_WFO_ENABLED)
+            {
+                if ( val[0] != '\0')
+                {
+                    MeshInfo("received sysevent MESH_WFO_ENABLED:%s\n",val);
+                    if(!strncmp(val,"true",sizeof("true")))
+                    {
+                        Send_MESH_WFO_ENABLED_Msg(true);
+                    }
+                    else if(!strncmp(val,"false",sizeof("false")))
+                    {
+                        Send_MESH_WFO_ENABLED_Msg(false);
+                    }
+                    else
+                    {
+                        MeshInfo("Unknow value for MESH_WFO_ENABLED");
+                    }
+                }
+
+            }
+#endif //WAN_FAILOVER_SUPPORTED
             else
             {
                 MeshWarning("undefined event %s \n",name);

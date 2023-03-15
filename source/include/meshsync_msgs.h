@@ -117,6 +117,7 @@ typedef enum {
 #endif
 #ifdef WAN_FAILOVER_SUPPORTED
     MESH_BACKUP_NETWORK,
+    MESH_WFO_ENABLED,
 #endif
 #ifdef ONEWIFI
     MESH_GET_STAINFO,
@@ -353,6 +354,11 @@ typedef struct _MeshNetworkType {
     eMeshDeviceMode type; // Status of mesh network
     char ifname [MAX_IFNAME_LEN];
 } MeshNetworkType;
+
+typedef struct _MeshWFOEnabledStatus {
+    uint8_t isWFOEnabledSet;
+    uint8_t WFOEnabledStatus;
+} MeshWFOEnabledStatus;
 #endif
 
 #ifdef ONEWIFI
@@ -529,6 +535,7 @@ typedef struct _MeshSync {
         MeshSyncSMPause                 speedtestCfg;
 #ifdef WAN_FAILOVER_SUPPORTED
         MeshNetworkType                 networkType;
+        MeshWFOEnabledStatus            meshWFOEnabled;
 #endif
 #ifdef ONEWIFI
         MeshGetSTAInfo                  staInfo;
