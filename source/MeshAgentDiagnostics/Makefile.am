@@ -16,8 +16,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-SUBDIRS = MeshAgentDiagnostics MeshAgentSsp MeshAgentCore
+# if FEATURE_WAN_FAIL_OVER
+AM_CFLAGS =
+ACLOCAL_AMFLAGS = -I m4
 
-if WITH_GTEST_SUPPORT
-SUBDIRS += test
-endif
+lib_LTLIBRARIES = libXmeshDiags.la
+libXmeshDiags_la_SOURCES  = xmesh_diag_apis.c
+libXmeshDiags_la_LDFLAGS  = -pthread
+libXmeshDiags_la_CPPFLAGS = -I$(top_srcdir)/source/MeshAgentDiagnostics
+
+bin_PROGRAMS = xmesh_diagnostics
+xmesh_diagnostics_SOURCES = xmesh_diag_main.c
+xmesh_diagnostics_LDADD = libXmeshDiags.la
+# endif # FEATURE_WAN_FAIL_OVER

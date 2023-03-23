@@ -45,6 +45,7 @@
 #include <rbus.h>
 #ifdef WAN_FAILOVER_SUPPORTED
 #include "ccsp_psm_helper.h"
+#include "xmesh_diag.h"
 #endif
 #include "ansc_platform.h"
 #include "meshsync_msgs.h"
@@ -2768,10 +2769,14 @@ void monitor_wfo_state(bool bStatus)
     if(bStatus)
     {
         MeshInfo("Start the Black box log\n");
+        // Run diagnostics every 90 seconds, dumps disabled, wfo enabled, delay diagnostics start by 45 seconds to
+        // give enough time for WFO to be initialized
+        xmesh_diag_start(100, false, true, 45);
     }
     else
     {
         MeshInfo("End Black box log\n");
+        xmesh_diag_stop();
     }
     return;
 }
