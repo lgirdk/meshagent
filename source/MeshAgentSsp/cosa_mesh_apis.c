@@ -1490,7 +1490,7 @@ static void* msgQServer(void *data)
         //then its an incoming connection
         if (FD_ISSET(master_socket, &readfds))
         {
-            if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0)
+            if ((new_socket = accept4(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen, SOCK_NONBLOCK))<0)
             {
                 MeshError("Mesh Queue accept failure\n");
                 return NULL;
@@ -1579,13 +1579,10 @@ static int msgQSend(MeshSync *data)
             if (send(sd, (char *)data, sizeof(MeshSync), 0) == -1)
             {
                 MeshError("Error %d sending to client message socket %d\n",errno, sd);
-                //Close the socket and mark as available in list for reuse
-                close(sd);
-                clientSockets[i] = 0;
-                clientSocketsMask &= ~(1 << i);
-           }
-           else
-               ret = 1;
+                shutdown(sd, SHUT_RDWR);
+            }
+            else
+                ret = 1;
         }
     }
 
