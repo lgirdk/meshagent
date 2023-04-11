@@ -2679,6 +2679,7 @@ rbusError_t publishRBUSEvent(char* event_name , void *val, rbus_type_t type)
 }
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED)
+#define GRE_POST_HOOK   "/usr/sbin/gre-post-hook.sh"
 void monitor_wfo_state(bool bStatus)
 {
     if(bStatus)
@@ -2694,11 +2695,18 @@ void monitor_wfo_state(bool bStatus)
 void Send_MESH_WFO_ENABLED_Msg(bool bStatus)
 {
     MeshSync mMsg = {0};
+    int rc;
     static bool previousStatus = 0;
     if(previousStatus == bStatus)
     {
-        MeshInfo("skip WFO status update");
+        MeshInfo("skip WFO status update\n");
         return;
+    }
+    MeshInfo("Info fcctl config --gre %d\n",!bStatus);
+    rc= v_secure_system( "fcctl config --gre %d",!bStatus);
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Error fcctl config --gre %d\n",!bStatus);
     }
     mMsg.msgType = MESH_WFO_ENABLED;
     mMsg.data.meshWFOEnabled.isWFOEnabledSet = true;
@@ -3041,6 +3049,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
     bool is_connect_timeout;
 #endif
+
     if (event->name == NULL)
     {
         MeshError("%s:%d Event name is NULL\n",__FUNCTION__, __LINE__);
@@ -3104,9 +3113,23 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
     if(strcmp(event->name,RBUS_WAN_CURRENT_ACTIVE_INTERFACE) == 0) //Gateway side alone
     {
         const char *CurrentActiveInterface = rbusValue_GetString(value, NULL);
+        static bool previous_wfo_enabled = 0;
+        bool wfo_enabled;
+        int rc;
         MeshInfo("Received RBUS_WAN_CURRENT_ACTIVE_INTERFACE Inter:%s\n",CurrentActiveInterface);
-        monitor_wfo_state( strncmp(CurrentActiveInterface, REMOTE_INTERFACE_NAME,
-                    sizeof(REMOTE_INTERFACE_NAME)) == 0);
+        wfo_enabled = (strncmp(CurrentActiveInterface, REMOTE_INTERFACE_NAME,
+                sizeof(REMOTE_INTERFACE_NAME)) == 0);
+        if (previous_wfo_enabled != wfo_enabled)
+        {
+            monitor_wfo_state(wfo_enabled);
+            MeshInfo("Info %s WFO %d\n",GRE_POST_HOOK, wfo_enabled);
+            rc= v_secure_system("%s WFO %d", GRE_POST_HOOK, wfo_enabled);
+            if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+            {
+                MeshError("Error %s WFO %d\n",GRE_POST_HOOK, wfo_enabled);
+            }
+            previous_wfo_enabled = wfo_enabled;
+        }
     }
     else
 #endif //WAN_FAILOVER_SUPPORTED
