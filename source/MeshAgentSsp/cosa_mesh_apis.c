@@ -376,7 +376,7 @@ static int Mesh_Init(ANSC_HANDLE hThisObject);
 static void Mesh_InitClientList();
 static void changeChBandwidth( int, int);
 static void Mesh_ModifyPodTunnel(MeshTunnelSet *conf);
-static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf);
+static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf, bool is_ovs);
 static BOOL is_configure_wifi_enabled();
 #ifdef WAN_FAILOVER_SUPPORTED
 bool Mesh_ExtenderBridge(char *ifname);
@@ -845,7 +845,7 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     case MESH_TUNNEL_SET_VLAN:
     {
       MeshInfo("Received Tunnel vlan creation\n");
-      Mesh_ModifyPodTunnelVlan((MeshTunnelSetVlan *)&rxMsg.data);
+      Mesh_ModifyPodTunnelVlan((MeshTunnelSetVlan *)&rxMsg.data, true);
     }
     break;
     case MESH_ETHERNET_MAC_LIST:
@@ -2215,24 +2215,35 @@ bool
 get_wan_bridge()
 {
     char *val = NULL;
-    int ret = false;
+    int ret = true;
     int len = 0;
 
     if (meshWANIfname == NULL)
+    {
         meshWANIfname = (char *) malloc(MAX_IFNAME_LEN);
 
-    if (PSM_Get_Record_Value2(bus_handle, g_Subsystem,
-                MESH_WAN_INTERFACE, NULL, &val) == CCSP_SUCCESS)
-    {
-        if(val) {
-            len = strlen(val);
-            if(len > 0)
+        if (PSM_Get_Record_Value2(bus_handle, g_Subsystem,
+                    MESH_WAN_INTERFACE, NULL, &val) == CCSP_SUCCESS)
+        {
+            if(val)
             {
-                snprintf(meshWANIfname, MAX_IFNAME_LEN, "%s", val);
-                ((CCSP_MESSAGE_BUS_INFO *)bus_handle)->freefunc(val);
-                ret = true;
+                len = strlen(val);
+                if(len > 0)
+                {
+                    snprintf(meshWANIfname, MAX_IFNAME_LEN, "%s", val);
+                    ((CCSP_MESSAGE_BUS_INFO *)bus_handle)->freefunc(val);
+                }
+                else
+                {
+                    MeshError(("MESH_ERROR:PSM_Get_Record_Value2 return empty\n"));
+                    free(meshWANIfname);
+                    meshWANIfname = NULL;
+                    ret = false;
+                }
             }
         }
+        else
+            ret = false;
     }
     return ret;
 }
@@ -2604,6 +2615,20 @@ bool Mesh_SetMeshEthBhaul(bool enable, bool init, bool commitSyscfg)
 }
 #ifdef WAN_FAILOVER_SUPPORTED
 
+static void Mesh_CreatePodVlan(MeshTunnelSetVlan *conf)
+{
+    int rc = -1;
+
+    rc = v_secure_system("ovs-vsctl add-br %s; /sbin/ifconfig %s up",conf->bridge,conf->bridge);
+    rc = v_secure_system("/sbin/vconfig add %s %d;/sbin/ifconfig %s up",conf->parent_ifname,conf->vlan,conf->ifname );
+
+    rc = v_secure_system("ovs-vsctl add-port %s %s",conf->bridge,conf->ifname);
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to add %s in %s \n",conf->ifname,conf->bridge);
+    }
+}
+
 static void Mesh_ext_create_lanVlans( char *ifname)
 {
    char vlan_ifname[MAX_IFNAME_LEN] = {0};
@@ -2629,7 +2654,7 @@ static void Mesh_ext_create_lanVlans( char *ifname)
        strncpy(data.bridge, lan_bridges[i],sizeof(data.bridge));
        data.vlan = lan_vlans[i];
        MeshInfo("Mesh_ext_create_lanVlans lan vlan: %s, bridge: %s\n", data.ifname, data.bridge);
-       Mesh_ModifyPodTunnelVlan(&data);
+       Mesh_ModifyPodTunnelVlan(&data, false);
    }
 }
 
@@ -2685,7 +2710,7 @@ bool Mesh_ExtenderBridge(char *ifname)
         strncpy(data.bridge, meshWANIfname,sizeof(data.bridge));
         strncpy(data.ifname,  vlan_ifname,sizeof(data.ifname));
         data.vlan = MESH_EXTENDER_VLAN;
-        Mesh_ModifyPodTunnelVlan(&data);
+        Mesh_ModifyPodTunnelVlan(&data,false);
     } else {
         if(!ret) {
 	    status = false;
@@ -3399,6 +3424,7 @@ void Mesh_backup_network(char *ifname, eMeshDeviceMode type)
     char cmd[256]={0};
     int rc = -1;
     int connect = 0;
+    static bool previous = false;
 
     MeshInfo("Received MESH_BACKUP_NETWORK for %s interface : %s \n",type ? "Gateway" : "Extender",ifname);
     if (Mesh_ExtenderBridge(ifname))
@@ -3412,17 +3438,23 @@ void Mesh_backup_network(char *ifname, eMeshDeviceMode type)
     }
     MeshInfo("Notify MESH_BACKUP_NETWORK cmd:%s connect: %d\n",cmd,(meshWANStatus ?  1 : 0));
     Mesh_SyseventSetStr(meshSyncMsgArr[MESH_BACKUP_NETWORK].sysStr, cmd, 0, false);
-    if (rbusSubscribed)
+    MeshInfo("Notify MESH_BACKUP_NETWORK current:%d, previous:%d\n",meshWANStatus,previous);
+    if (meshWANStatus != previous)
     {
-        connect = meshWANStatus ?  1 : 0;
-        rc = publishRBUSEvent(EVENT_MESH_WAN_LINK, (void *)&connect,MESH_TYPE_BOOL);
-        if(rc == RBUS_ERROR_SUCCESS)
+        Mesh_SyseventSetStr(meshSyncMsgArr[MESH_BACKUP_NETWORK].sysStr, cmd, 0, false);
+        if (rbusSubscribed)
         {
-            MeshInfo(("Published MeshWANLink status value.\n"));
+            connect = meshWANStatus ?  1 : 0;
+            rc = publishRBUSEvent(EVENT_MESH_WAN_LINK, (void *)&connect,MESH_TYPE_BOOL);
+            if(rc == RBUS_ERROR_SUCCESS)
+            {
+                MeshInfo("Published MeshWANLink status value %d\n",connect);
+            }
         }
+        else
+            MeshError(("Not subcribtion for MeshWANLink status value.\n"));
     }
-    else
-        MeshError(("Not subcribtion for MeshWANLink status value.\n"));
+    previous = meshWANStatus;
 }
 #endif
 #ifdef ONEWIFI
@@ -3719,37 +3751,45 @@ static void Mesh_ModifyPodTunnel(MeshTunnelSet *conf)
 #endif
 }
 
-static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf)
+static void Mesh_ModifyPodTunnelVlan(MeshTunnelSetVlan *conf, bool is_ovs)
 {
 #ifdef MESH_OVSAGENT_ENABLE
-    ovs_interact_request ovs_request = {0};
-    Gateway_Config *pGwConfig = NULL;
-    ovs_request.method = OVS_TRANSACT_METHOD;
-    ovs_request.operation = OVS_INSERT_OPERATION;
-    ovs_request.block_mode = OVS_ENABLE_BLOCK_MODE;
-    ovs_request.table_config.table.id = OVS_GW_CONFIG_TABLE;
-
-    if (!ovs_agent_api_get_config(OVS_GW_CONFIG_TABLE, (void **)&pGwConfig))
+    if (is_ovs)
     {
-      MeshError("%s failed to allocate and initialize config\n", __FUNCTION__);
-      return ;
-    }
+        ovs_interact_request ovs_request = {0};
+        Gateway_Config *pGwConfig = NULL;
+        ovs_request.method = OVS_TRANSACT_METHOD;
+        ovs_request.operation = OVS_INSERT_OPERATION;
+        ovs_request.block_mode = OVS_ENABLE_BLOCK_MODE;
+        ovs_request.table_config.table.id = OVS_GW_CONFIG_TABLE;
 
-    strncpy(pGwConfig->if_name, conf->ifname, sizeof(pGwConfig->if_name)-1);
-    strncpy(pGwConfig->parent_bridge, conf->bridge, sizeof(pGwConfig->parent_bridge)-1);
-    if(conf->vlan > 0) {
-        strncpy(pGwConfig->parent_ifname, conf->parent_ifname, sizeof(pGwConfig->parent_ifname)-1);
-        pGwConfig->vlan_id = conf->vlan;
-        pGwConfig->if_type = OVS_VLAN_IF_TYPE;
-    }
-    ovs_request.table_config.config = (void *) pGwConfig;
+        if (!ovs_agent_api_get_config(OVS_GW_CONFIG_TABLE, (void **)&pGwConfig))
+        {
+           MeshError("%s failed to allocate and initialize config\n", __FUNCTION__);
+           return ;
+        }
 
-    if(ovs_agent_api_interact(&ovs_request,NULL))
-     {
-      MeshInfo("%s Mesh OVS interact succeeded ifname:%s bridge:%s\n",__FUNCTION__, conf->ifname, conf->bridge);
-     } else {
-      MeshError("%s Mesh OVS interact failed ifname:%s bridge:%s\n",__FUNCTION__, conf->ifname, conf->bridge);
-     }
+        strncpy(pGwConfig->if_name, conf->ifname, sizeof(pGwConfig->if_name)-1);
+        strncpy(pGwConfig->parent_bridge, conf->bridge, sizeof(pGwConfig->parent_bridge)-1);
+        if(conf->vlan > 0) {
+            strncpy(pGwConfig->parent_ifname, conf->parent_ifname, sizeof(pGwConfig->parent_ifname)-1);
+            pGwConfig->vlan_id = conf->vlan;
+            pGwConfig->if_type = OVS_VLAN_IF_TYPE;
+        }
+        ovs_request.table_config.config = (void *) pGwConfig;
+
+        if(ovs_agent_api_interact(&ovs_request,NULL))
+        {
+            MeshInfo("%s Mesh OVS interact succeeded ifname:%s bridge:%s\n",__FUNCTION__, conf->ifname, conf->bridge);
+        } else {
+            MeshError("%s Mesh OVS interact failed ifname:%s bridge:%s\n",__FUNCTION__, conf->ifname, conf->bridge);
+        }
+
+    }
+#ifdef WAN_FAILOVER_SUPPORTED
+    else
+        Mesh_CreatePodVlan(conf);
+#endif
 #else
     UNREFERENCED_PARAMETER(conf);
     MeshInfo("%s: OVSAgent is not integrated in this platform yet\n", __FUNCTION__);
