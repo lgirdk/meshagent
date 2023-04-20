@@ -32,7 +32,6 @@ ExecStopPost=/bin/echo "Mesh Wifi Stopping"
 Restart=no
 RemainAfterExit=yes
 
-StandardOutput=syslog+console
 
 #[Install]
 #WantedBy=multi-user.target

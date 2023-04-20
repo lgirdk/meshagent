@@ -30,7 +30,6 @@ WorkingDirectory=/usr/ccsp/mesh
 ExecStart=/usr/bin/meshAgent -subsys $Subsys
 Restart=always
 
-StandardOutput=syslog+console
 
 [Install]
 WantedBy=multi-user.target
