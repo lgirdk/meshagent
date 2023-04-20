@@ -52,11 +52,12 @@
 #define  CCSP_MESHAGENT_START_CFG_FILE						"MeshAgent.cfg"
 
 #if defined(WAN_FAILOVER_SUPPORTED)
+#define EVENT_MESH_ETHERNETBHAUL_UPLINK  "Device.X_RDK_MeshAgent.EthernetBhaulUplink.Status"
 #define EVENT_MESH_WAN_LINK              "Device.X_RDK_MeshAgent.MeshWANLink.Status"
 #define EVENT_MESH_WAN_IFNAME            "Device.X_RDK_MeshAgent.MeshWANLink.Interface.Name"
 #define MESH_WAN_INTERFACE               "dmsb.Mesh.WAN.Interface.Name"
 #define MESH_ETH_INTERFACE               "dmsb.l2net.11.Members.Link"
-#define NUM_OF_RBUS_PARAMS                3
+#define NUM_OF_RBUS_PARAMS                4
 #endif
 
 #define WIFI_STA_INTERFACE_NAME          "Device.WiFi.STA.%d.InterfaceName"

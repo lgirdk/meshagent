@@ -220,6 +220,7 @@ rbusHandle_t handle;
 static bool meshWANStatus = false;
 static char *meshWANIfname = NULL;
 static bool rbusSubscribed = false;
+static bool meshETHBhaulUplink = false;
 bool get_wan_bridge();
 bool get_eth_interface(char * eth_interface);
 
@@ -231,7 +232,8 @@ rbusDataElement_t meshRbusDataElements[NUM_OF_RBUS_PARAMS] = {
 
         {EVENT_MESH_WAN_LINK, RBUS_ELEMENT_TYPE_EVENT, {rbusGetBoolHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
         {EVENT_MESH_WAN_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, NULL, NULL}},
-	{EVENT_MESH_BACKHAUL_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}}
+	{EVENT_MESH_BACKHAUL_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
+        {EVENT_MESH_ETHERNETBHAUL_UPLINK, RBUS_ELEMENT_TYPE_EVENT, {rbusGetBoolHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}}
 };
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
@@ -2890,6 +2892,10 @@ rbusError_t rbusGetBoolHandler(rbusHandle_t handle, rbusProperty_t property, rbu
     {
         rbusValue_SetBoolean(value, meshWANStatus);
     }
+    else if (strcmp(name, EVENT_MESH_ETHERNETBHAUL_UPLINK) == 0 )
+    {
+        rbusValue_SetBoolean(value, meshETHBhaulUplink);
+    }
     else
     {
         MeshError("Parameter not supported [%s]\n", name);
@@ -2919,6 +2925,10 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
         rbusSubscribed  = action == RBUS_EVENT_ACTION_SUBSCRIBE ?true : false;
     }
     else if (!strcmp(EVENT_MESH_BACKHAUL_IFNAME, eventName))
+    {
+        rbusSubscribed  = action == RBUS_EVENT_ACTION_SUBSCRIBE ?true : false;
+    }
+    else if (!strcmp(EVENT_MESH_ETHERNETBHAUL_UPLINK, eventName))
     {
         rbusSubscribed  = action == RBUS_EVENT_ACTION_SUBSCRIBE ?true : false;
     }
@@ -3438,6 +3448,17 @@ void Mesh_backup_network(char *ifname, eMeshDeviceMode type)
     static bool previous = false;
 
     MeshInfo("Received MESH_BACKUP_NETWORK for %s interface : %s \n",type ? "Gateway" : "Extender",ifname);
+    if(!type)
+    {
+        meshETHBhaulUplink = (strstr(ifname,MESH_ETHPORT) != NULL);
+        MeshInfo("MESH_ETHERNETBHAUL_UPLINK connect:%d\n", meshETHBhaulUplink);
+        rc = publishRBUSEvent(EVENT_MESH_ETHERNETBHAUL_UPLINK, (void *)&meshETHBhaulUplink,MESH_TYPE_BOOL);
+        if(rc == RBUS_ERROR_SUCCESS)
+        {
+            MeshInfo(("Published MESH_ETHERNETBHAUL_UPLINK status value.\n"));
+        }
+    }
+
     if (Mesh_ExtenderBridge(ifname))
     {
         snprintf(cmd, sizeof(cmd), "up");
