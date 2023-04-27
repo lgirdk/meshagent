@@ -171,6 +171,12 @@
                                     <writable>true</writable>
                                 </parameter>
                                 <parameter>
+                                    <name>XleModeCloudCtrlEnable</name>
+                                    <type>boolean</type>
+                                    <syntax>bool</syntax>
+                                    <writable>true</writable>
+                                </parameter>
+                                <parameter>
                                     <name>Opensync</name>
                                     <type>boolean</type>
                                     <syntax>bool</syntax>
