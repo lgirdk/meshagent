@@ -4218,7 +4218,7 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
         if(i==5) {
          MeshInfo("All retrial failed for syscfg get , try reading from syscfg.db before applying default\n");
          t2_event_d("SYS_ERROR_SyscfgGet_retry_failed", 1);
-         cmd=v_secure_popen("r", "grep mesh_enable /nvram/syscfg.db | cut -d '=' -f2"); 
+         cmd=v_secure_popen("r", "grep mesh_enable /nvram/secure/data/syscfg.db | cut -d '=' -f2"); 
          if (cmd==NULL) {
              cmd=v_secure_popen("r", "grep mesh_enable /opt/secure/data/syscfg.db | cut -d '=' -f2"); 
              if(cmd==NULL) {
