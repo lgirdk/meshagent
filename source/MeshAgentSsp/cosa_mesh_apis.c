@@ -147,6 +147,8 @@ extern char g_Subsystem[32];
 
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 #define      RBUS_DEVICE_MODE        "Device.X_RDKCENTRAL-COM_DeviceControl.DeviceNetworkingMode"
+#endif
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
 #define      RBUS_STA_CONNECT_TIMEOUT "Device.WiFi.STAConnectionTimeout"
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED)
@@ -168,6 +170,8 @@ typedef enum
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
     MESH_RBUS_DEVICE_MODE,
+#endif
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     MESH_RBUS_STA_CONNECT_TIMEOUT,
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED)
@@ -192,6 +196,8 @@ MeshRbusEvent  meshRbusEvent[] = {
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
     {MESH_RBUS_DEVICE_MODE,                      RBUS_DEVICE_MODE,                     false},
+#endif
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     {MESH_RBUS_STA_CONNECT_TIMEOUT,              RBUS_STA_CONNECT_TIMEOUT,             false},
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED)
@@ -367,7 +373,7 @@ void  Mesh_sendCurrentSta();
 void Mesh_sendStaInterface(char * mesh_sta,char *bssid, bool status);
 int get_sta_active_interface_name();
 #endif
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
 static void Mesh_sendEbhStatusRequest();
 #endif
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
@@ -909,7 +915,7 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
         handle_led_status(rxMsg.data.syncStatus.status);
     }
     break;
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     case MESH_EBH_STATUS:
     {
         MeshInfo(("Received MESH_EBH_STATUS sync message.\n"));
@@ -3159,7 +3165,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     int new_device_mode;
 #endif
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     bool is_connect_timeout;
 #endif
 
@@ -3207,7 +3213,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
     }
      else
 #endif
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     if(strcmp(event->name,RBUS_STA_CONNECT_TIMEOUT) == 0)
     {
         MeshInfo("Received RBUS_STA_CONNECT_TIMEOUT event\n");
@@ -4547,7 +4553,7 @@ static void Mesh_sendReducedRetry(bool value)
     msgQSend(&mMsg);
 }
 
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
 static void Mesh_sendEbhStatusRequest()
 {
     // send out notification to plume
@@ -6411,7 +6417,7 @@ static void Mesh_InitClientList(void)
 static int Mesh_Init(ANSC_HANDLE hThisObject)
 {
     int status = 0;
-#if defined(ONEWIFI)
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
     pthread_t tid_sub;
 #endif
     int thread_status = 0;
@@ -6528,9 +6534,11 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     meshRbusInit();
 #ifdef ONEWIFI
     get_sta_active_interface_name();
+#endif
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
     rbus_get_gw_present();
 #endif
+#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
     thread_status = 0;
     thread_status = pthread_create(&tid_sub, NULL, handle_rbus_Subscribe,NULL);
     if (thread_status == 0)
