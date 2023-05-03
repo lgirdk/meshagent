@@ -140,8 +140,9 @@ AC_CONFIG_FILES(
     Makefile
     source/Makefile
     source/MeshAgentSsp/Makefile
-	source/MeshAgentCore/Makefile
-	source/clientTest/Makefile
+    source/MeshAgentCore/Makefile
+    source/MeshAgentDiagnostics/Makefile
+    source/clientTest/Makefile
 )
 
 AC_SUBST(GTEST_ENABLE_FLAG)
