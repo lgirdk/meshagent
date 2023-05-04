@@ -157,6 +157,29 @@ static bool gMeshRestart = false;
 #if defined(WAN_FAILOVER_SUPPORTED)
 #define      RBUS_WAN_CURRENT_ACTIVE_INTERFACE "Device.X_RDK_WanManager.CurrentActiveInterface"
 #define      REMOTE_INTERFACE_NAME             "brRWAN"
+
+typedef enum
+{
+    MESH_RBUS_PUBLISH_WAN_LINK = 0,
+    MESH_RBUS_PUBLISH_BACKHAUL_IFNAME,
+    MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK,
+    MESH_RBUS_PUBLISH_EVENT_TOTAL
+} eMeshRbusPublishType;
+
+typedef struct _MeshRbusPublishEvent
+{
+   eMeshRbusPublishType eType;
+   char name[MAX_IFNAME_LEN];
+   rbus_type_t rbus_type;
+   unsigned int subflag;
+}MeshRbusPublishEvent;
+
+MeshRbusPublishEvent  meshRbusPublishEvent[] = {
+    {MESH_RBUS_PUBLISH_WAN_LINK,               EVENT_MESH_WAN_LINK,                  MESH_TYPE_BOOL,     0},
+    {MESH_RBUS_PUBLISH_BACKHAUL_IFNAME,        EVENT_MESH_BACKHAUL_IFNAME,           MESH_TYPE_STRING,   0},
+    {MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK,     EVENT_MESH_ETHERNETBHAUL_UPLINK,      MESH_TYPE_BOOL,     0}
+};
+
 #endif //WAN_FAILOVER_SUPPORTED
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
 #define      RBUS_GATEWAY_PRESENT    "Device.X_RDK_GatewayManagement.ExternalGatewayPresent"
@@ -210,7 +233,7 @@ MeshRbusEvent  meshRbusEvent[] = {
     {MESH_RBUS_GATEWAY_PRESENT,                  RBUS_GATEWAY_PRESENT,                 false}
 #endif
 };
-rbusError_t publishRBUSEvent(char* event_name , void *event_val,rbus_type_t type);
+rbusError_t publishRBUSEvent(eMeshRbusPublishType ptype, void *event_val);
 #endif
 
 rbusHandle_t handle;
@@ -223,7 +246,6 @@ rbusHandle_t handle;
 static bool wfo_mode = false;
 static bool meshWANStatus = false;
 static char *meshWANIfname = NULL;
-static bool rbusSubscribed = false;
 static bool meshETHBhaulUplink = false;
 bool get_wan_bridge();
 bool get_eth_interface(char * eth_interface);
@@ -2763,7 +2785,7 @@ bool Mesh_ExtenderBridge(char *ifname)
  *
  * Publish event after event value gets updated
  */
-rbusError_t publishRBUSEvent(char* event_name , void *val, rbus_type_t type)
+rbusError_t publishRBUSEvent(eMeshRbusPublishType ptype , void *val)
 {
     rbusEvent_t event;
     rbusObject_t data;
@@ -2771,10 +2793,15 @@ rbusError_t publishRBUSEvent(char* event_name , void *val, rbus_type_t type)
     bool event_val;
     rbusError_t ret = RBUS_ERROR_SUCCESS;
 
+    if(!meshRbusPublishEvent[ptype].subflag)
+    {
+        MeshInfo("No subscription for %s\n", meshRbusPublishEvent[ptype].name);
+        return RBUS_ERROR_NOSUBSCRIBERS;
+    }
     //initialize and set new value for the event
     rbusValue_Init(&value);
 
-    switch(type)
+    switch(meshRbusPublishEvent[ptype].rbus_type)
     {
     case MESH_TYPE_BOOL:
         event_val = *((int  *)val) ?  true : false;
@@ -2784,23 +2811,26 @@ rbusError_t publishRBUSEvent(char* event_name , void *val, rbus_type_t type)
         rbusValue_SetString(value, (char *)val);
     break;
     default:
-        MeshError("publishRBUSEvent default parameter\n"); 
+        MeshError("publishRBUSEvent default parameter\n");
         break;
     }
 
     //initialize and set rbusObject with desired values
     rbusObject_Init(&data, NULL);
-    rbusObject_SetValue(data, event_name, value);
+    rbusObject_SetValue(data, meshRbusPublishEvent[ptype].name, value);
 
     //set data to be transferred
-    event.name = event_name;
+    event.name = meshRbusPublishEvent[ptype].name;
     event.data = data;
     event.type = RBUS_EVENT_GENERAL;
     //publish the event
+
     ret = rbusEvent_Publish(handle, &event);
-    if(ret != RBUS_ERROR_SUCCESS) {
-	MeshError("rbusEvent_Publish for %s failed\n",CCSP_COMPONENT_ID);
-    }
+    MeshInfo(
+        "rbusEvent_Publish for %s : %s action : %s\n",
+        CCSP_COMPONENT_ID, meshRbusPublishEvent[ptype].name,
+        ret == RBUS_ERROR_SUCCESS ? "sucess" : "failed" );
+
     //release all initialized rbusValue objects
     rbusValue_Release(value);
     rbusObject_Release(data);
@@ -2924,6 +2954,8 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
     (void)filter;
     (void)interval;
     (void)autoPublish;
+
+    int i;
     MeshInfo(
         "eventSubHandler called:\n" \
         "\taction=%s\n" \
@@ -2931,24 +2963,22 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
         action == RBUS_EVENT_ACTION_SUBSCRIBE ? "subscribe" : "unsubscribe",
         eventName);
 
-    if(!strcmp(EVENT_MESH_WAN_LINK, eventName))
+    for (i = 0; i<MESH_RBUS_PUBLISH_EVENT_TOTAL ; i++)
     {
-        rbusSubscribed  = action == RBUS_EVENT_ACTION_SUBSCRIBE ?true : false;
+        if(!strcmp(meshRbusPublishEvent[i].name, eventName))
+        {
+            if (action == RBUS_EVENT_ACTION_SUBSCRIBE)
+                meshRbusPublishEvent[i].subflag++;
+            else
+                meshRbusPublishEvent[i].subflag--;
+
+            break;
+        }
     }
-    else if (!strcmp(EVENT_MESH_BACKHAUL_IFNAME, eventName))
-    {
-        rbusSubscribed  = action == RBUS_EVENT_ACTION_SUBSCRIBE ?true : false;
-    }
-    else if (!strcmp(EVENT_MESH_ETHERNETBHAUL_UPLINK, eventName))
-    {
-        rbusSubscribed  = action == RBUS_EVENT_ACTION_SUBSCRIBE ?true : false;
-    }
-    else
-    {
-        MeshError("provider: eventSubHandler unexpected eventName %s\n", eventName);
-    }
+
     return RBUS_ERROR_SUCCESS;
 }
+
 #endif
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED) || defined(GATEWAY_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 void changeStaState(bool state)
@@ -3090,7 +3120,6 @@ void *uplinkHandleFunction()
 {
     char local_ip[MAX_IP_LEN];
     char remote_ip[MAX_IP_LEN];
-    int rc =-1;
 
     is_uplink_tid_exist = 1;
     udhcpc_stop(GATEWAY_FAILOVER_BRIDGE);
@@ -3123,11 +3152,7 @@ void *uplinkHandleFunction()
 	    {
                 if (get_ipaddr_subnet(GATEWAY_FAILOVER_BRIDGE, local_ip, remote_ip))
                 {
-                    rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)GATEWAY_FAILOVER_BRIDGE,MESH_TYPE_STRING);
-                    if(rc == RBUS_ERROR_SUCCESS)
-                    {
-                        MeshInfo("Published MeshWANLink.Interface.Name status value\n");
-                    }
+                    publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)GATEWAY_FAILOVER_BRIDGE);
 		    snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", GATEWAY_FAILOVER_BRIDGE);
 		}
             }
@@ -3222,7 +3247,6 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 #endif 
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
     int err;
-    int rc =-1;
     bool is_gateway_present = false;
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
@@ -3249,7 +3273,6 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 
     MeshInfo("%s:%d Rbus event name=%s\n",__FUNCTION__, __LINE__, event->name);
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
-    int rc =-1;
 
     if (strcmp(event->name,RBUS_DEVICE_MODE) == 0)
     {
@@ -3261,11 +3284,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 	else
             snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_XLE_BRIDGE);
 
-        rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname,MESH_TYPE_STRING);
-        if(rc == RBUS_ERROR_SUCCESS)
-        {
-            MeshInfo("Published MeshWANLink.Interface.Name status value %s\n",mesh_backhaul_ifname);
-        }
+        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
         if(new_device_mode != device_mode)
         {
             device_mode = new_device_mode;
@@ -3339,11 +3358,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
             handle_uplink_bridge(NULL, NULL, NULL, false);
             udhcpc_stop(sta.sta_ifname);
             udhcpc_stop(GATEWAY_FAILOVER_BRIDGE);
-	    rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE,MESH_TYPE_STRING);
-            if(rc == RBUS_ERROR_SUCCESS)
-            {
-               MeshInfo("Published MeshWANLink.Interface.Name status value\n");
-            }
+	    publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE);
 	    snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
 
 	    if (g_pMeshAgent->meshEnable)
@@ -3472,11 +3487,7 @@ void rbus_get_gw_present()
 
     if(rc != RBUS_ERROR_SUCCESS) {
         MeshInfo("gateway present rbus get failed");
-	rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE,MESH_TYPE_STRING);
-        if(rc == RBUS_ERROR_SUCCESS)
-        {
-            MeshInfo("Published Device.X_RDK_MeshAgent.MeshBackHaul.Ifname status value %s\n",MESH_BHAUL_BRIDGE);
-        }
+	publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE);
 	snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
         return;
     }
@@ -3495,11 +3506,7 @@ void rbus_get_gw_present()
     }
     else
     {
-        rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE,MESH_TYPE_STRING);
-        if(rc == RBUS_ERROR_SUCCESS)
-        {
-            MeshInfo("Published Device.X_RDK_MeshAgent.MeshBackHaul.Ifname status value %s\n",MESH_BHAUL_BRIDGE);
-        }
+        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE);
         snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
     }
 }
@@ -3508,7 +3515,6 @@ void rbus_get_gw_present()
 void Mesh_backup_network(char *ifname, eMeshDeviceMode type)
 {
     char cmd[256]={0};
-    int rc = -1;
     int connect = 0;
     static bool previous = false;
 
@@ -3517,11 +3523,7 @@ void Mesh_backup_network(char *ifname, eMeshDeviceMode type)
     {
         meshETHBhaulUplink = (strstr(ifname,MESH_ETHPORT) != NULL);
         MeshInfo("MESH_ETHERNETBHAUL_UPLINK connect:%d\n", meshETHBhaulUplink);
-        rc = publishRBUSEvent(EVENT_MESH_ETHERNETBHAUL_UPLINK, (void *)&meshETHBhaulUplink,MESH_TYPE_BOOL);
-        if(rc == RBUS_ERROR_SUCCESS)
-        {
-            MeshInfo(("Published MESH_ETHERNETBHAUL_UPLINK status value.\n"));
-        }
+        publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink);
     }
 
     if (Mesh_ExtenderBridge(ifname))
@@ -3539,17 +3541,8 @@ void Mesh_backup_network(char *ifname, eMeshDeviceMode type)
     if (meshWANStatus != previous)
     {
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_BACKUP_NETWORK].sysStr, cmd, 0, false);
-        if (rbusSubscribed)
-        {
-            connect = meshWANStatus ?  1 : 0;
-            rc = publishRBUSEvent(EVENT_MESH_WAN_LINK, (void *)&connect,MESH_TYPE_BOOL);
-            if(rc == RBUS_ERROR_SUCCESS)
-            {
-                MeshInfo("Published MeshWANLink status value %d\n",connect);
-            }
-        }
-        else
-            MeshError(("Not subcribtion for MeshWANLink status value.\n"));
+        connect = meshWANStatus ?  1 : 0;
+        publishRBUSEvent(MESH_RBUS_PUBLISH_WAN_LINK, (void *)&connect);
     }
     previous = meshWANStatus;
 }
@@ -6683,11 +6676,7 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     else
         snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_XLE_BRIDGE);
 
-    rc = publishRBUSEvent(EVENT_MESH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname,MESH_TYPE_STRING);
-    if(rc == RBUS_ERROR_SUCCESS)
-    {
-        MeshInfo("Published MeshWANLink.Interface.Name status value %s\n",mesh_backhaul_ifname);
-    }
+    publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
     MeshInfo("Current device mode = %d\n",device_mode);
 #endif
 #endif
