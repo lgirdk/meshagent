@@ -7,32 +7,36 @@
 #include <stdbool.h>
 
 char* getFormattedTime(void);
-FILE* g_flog = NULL;        //for logging to file
+FILE* log_file = NULL;
+bool  g_flog = true;        //for logging to file
 bool  g_clog = false;       //for logging to console
 
 #define LOG_FILE_BBOX     "/rdklogs/logs/MeshBlackbox.log"
 #define LOG_FILE_BBOXDMP  "/rdklogs/logs/MeshBlackboxDumps.log"
-#define __LOG__(format, loglevel, file, color_start, color_end, ...)                                                      \
+#define __LOG__(format, loglevel, file, log2console, log2file, color_start, color_end, ...)                         \
     do {                                                                                                            \
-        if (g_clog) {                                                                                               \
+        if (g_clog && log2console) {                                                                                \
             printf("%s%s %-5s " format "%s", color_start, getFormattedTime(), loglevel, ## __VA_ARGS__, color_end); \
         }                                                                                                           \
-        g_flog = fopen(file, "a");                                                                         \
-        if (g_flog) {                                                                                               \
-            fprintf(g_flog, "%s %-5s " format, getFormattedTime(), loglevel, ## __VA_ARGS__);                       \
-            fclose(g_flog);                                                                                         \
-            g_flog = NULL;                                                                                          \
+        if (log2file) {                                                                                             \
+            log_file = fopen(file, "a");                                                                            \
+            if (log_file) {                                                                                         \
+                fprintf(log_file, "%s %-5s " format, getFormattedTime(), loglevel, ## __VA_ARGS__);                 \
+                fclose(log_file);                                                                                   \
+                log_file = NULL;                                                                                    \
+            }                                                                                                       \
         }                                                                                                           \
     } while (0)
 
-#define LOGINFO(format, ...)      __LOG__(format, "INFO" , LOG_FILE_BBOX, "", "", ## __VA_ARGS__)
-#define LOGSUCCESS(format, ...)   __LOG__(format, "INFO" , LOG_FILE_BBOX, "\033[32m", "\033[m", ## __VA_ARGS__)
-#define LOGERROR(format, ...)     __LOG__(format, "ERROR", LOG_FILE_BBOX, "\033[31m", "\033[m", ## __VA_ARGS__)
+#define LOGINFO(format, ...)      __LOG__(format, "INFO" , LOG_FILE_BBOX, true, g_flog, "", "", ## __VA_ARGS__)
+#define LOGSUCCESS(format, ...)   __LOG__(format, "INFO" , LOG_FILE_BBOX, true, g_flog, "\033[32m", "\033[m", ## __VA_ARGS__)
+#define LOGERROR(format, ...)     __LOG__(format, "ERROR", LOG_FILE_BBOX, true, g_flog, "\033[31m", "\033[m", ## __VA_ARGS__)
 
-#define LOGDUMPINFO(format, ...)  __LOG__(format, "INFO" , LOG_FILE_BBOXDMP, "", "", ## __VA_ARGS__)
-#define LOGDUMPERROR(format, ...) __LOG__(format, "ERROR", LOG_FILE_BBOXDMP, "\033[31m", "\033[m", ## __VA_ARGS__)
+#define LOGDUMPINFO(format, ...)  __LOG__(format, "INFO" , LOG_FILE_BBOXDMP, false, true, "", "", ## __VA_ARGS__)
+#define LOGDUMPERROR(format, ...) __LOG__(format, "ERROR", LOG_FILE_BBOXDMP, false, true, "\033[31m", "\033[m", ## __VA_ARGS__)
 
-#define LOG_TO_CONSOLE() g_clog = true
+#define LOG_TO_CONSOLE(x) g_clog = x
+#define LOG_TO_FILE(x)    g_flog = x
 
 void xmesh_diag_start(int interval, bool dumps_enabled, bool wfo, int delay);
 void xmesh_diag_stop();

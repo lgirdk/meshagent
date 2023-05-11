@@ -61,7 +61,6 @@ typedef struct _count_t {
     int xb_brwan_unreach;
     int xb_brrwan_not_default;
     int xb_no_internet_brrwan;
-    int xle_no_wfo_state;
     int xle_bhaul_no_conn;
     int xle_bhaul_no_ip;
     int xle_gre_remote_unreach;
@@ -160,8 +159,6 @@ static int cmd_exec(char *cmd, char *out, size_t out_sz) {
     while(out[strlen(out)-1] == '\r' || out[strlen(out)-1] == '\n') {
         out[strlen(out)-1] = '\0';
     }
-
-    /* LOGINFO("ABHIDEBUG %s - cmdlen: %d, buflen: %d\n", cmd, strlen(cmd), strlen(buf)); */
 
     return pclose(fp);
 }
@@ -614,12 +611,7 @@ static bool xle_check_wfo_mode(bool wfo) {
 
     snprintf(cmd,sizeof(cmd),"sysevent get mesh_wfo_enabled");
     cmd_exec(cmd,buf,sizeof(buf));
-    if (!strlen(buf)) {
-        LOGERROR("Could not get value for mesh_wfo_enabled\n");
-        g_count.xle_no_wfo_state++;
-        return false;
-    }
-    LOGINFO("mesh_wfo_enabled : %s\n", buf);
+    LOGINFO("mesh_wfo_enabled : %s\n", strlen(buf) ? buf : "false");
 
     if(wfo) {
         if (strncmp(buf, "true", 5)) {
@@ -1191,7 +1183,7 @@ void xmesh_diag_stop() {
     time_t session_duration = now - g_start_time;
 
     LOGINFO("================== MESH DIAGNOSTIC TOOL OVERALL STATS ==================\n");
-    LOGINFO("Session total duration : %ld seconds\n", session_duration);
+    LOGINFO("Session total duration (in seconds) : %ld\n", session_duration);
     LOGINFO("Total number of iterations : %d\n",g_count.total_iter);
     LOGINFO("Total number of successful iterations : %d\n",g_count.count_all_good);
     if(g_count.not_wfo)                 LOGERROR("Failure: Device is not in WFO mode                    : %d\n",g_count.not_wfo);
@@ -1206,7 +1198,6 @@ void xmesh_diag_stop() {
     if(g_count.xb_brwan_unreach)        LOGERROR("Failure: brWAN 192.168.246.1 unreachable              : %d\n",g_count.xb_brwan_unreach);
     if(g_count.xb_brrwan_not_default)   LOGERROR("Failure: XB default route is not brRWAN               : %d\n",g_count.xb_brrwan_not_default);
     if(g_count.xb_no_internet_brrwan)   LOGERROR("Failure: Internet is unavailable via brRWAN           : %d\n",g_count.xb_no_internet_brrwan);
-    if(g_count.xle_no_wfo_state)        LOGERROR("Failure: mesh_wfo_enabled state not found             : %d\n",g_count.xle_no_wfo_state);
     if(g_count.xle_bhaul_no_conn)       LOGERROR("Failure: None of the backhaul interfaces are connected: %d\n",g_count.xle_bhaul_no_conn);
     if(g_count.xle_bhaul_no_ip)         LOGERROR("Failure: XLE has no backhaul IP yet                   : %d\n",g_count.xle_bhaul_no_ip);
     if(g_count.xle_gre_remote_unreach)  LOGERROR("Failure: Gateway unreachable in gre endpoint          : %d\n",g_count.xle_gre_remote_unreach);
