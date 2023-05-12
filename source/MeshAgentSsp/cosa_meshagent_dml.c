@@ -29,7 +29,7 @@
 #include <msgpack.h>
 #include "helpers.h"
 #include "cosa_apis_util.h"
-#include "base64.h"
+#include <trower-base64/base64.h>
 
 #define DEBUG_INI_NAME  "/etc/debug.ini"
 extern bool isXB3Platform;
