@@ -228,8 +228,9 @@ static bool check_default_route(char* default_route) {
 static void xmesh_print_dumps(commands_t *commands, int num_cmds) {
     char buf[MAX_BUFFER_SIZE];
     commands_t command;
+    int i;
 
-    for (int i=0; i<num_cmds; i++) {
+    for (i=0; i<num_cmds; i++) {
         command = *(commands+i);
         if (cmd_exec(command.cmd, buf, sizeof(buf))) {
             LOGDUMPERROR("command failed \"%s\"\n",command.cmd);
@@ -780,9 +781,11 @@ static int xb_find_connected_pods(char ***conn_pods_list) {
     char buf[32];
     int total_pods = 0;
     int pods_on_iface;
+    int ifnum;
+    int i;
 
     // Identify clients connected to backhaul accesspoints 13, 14
-    for (int ifnum=13; ifnum<=14; ifnum++) {
+    for (ifnum=13; ifnum<=14; ifnum++) {
         snprintf(cmd,sizeof(cmd),"dmcli eRT getv Device.WiFi.AccessPoint.%d.AssociatedDeviceNumberOfEntries | grep value: | cut -d':' -f3 | xargs", ifnum);
         cmd_exec(cmd,buf,sizeof(buf));
         if (!strlen(buf)) {
@@ -791,7 +794,7 @@ static int xb_find_connected_pods(char ***conn_pods_list) {
         }
         pods_on_iface = atoi(buf);
         LOGINFO("%d pods connected to Device.WiFi.AccessPoint.%d.\n", pods_on_iface, ifnum);
-        for (int i=1; i<=pods_on_iface; i++) {
+        for (i=1; i<=pods_on_iface; i++) {
             *conn_pods_list = (char**)realloc(*conn_pods_list, (total_pods+1) * sizeof(char*));
             (*conn_pods_list)[total_pods] = (char*)malloc(BUF_MAC);
             snprintf(cmd,sizeof(cmd),"dmcli eRT getv Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.MACAddress | grep value: | rev | cut -d' ' -f2 | rev", ifnum, i);
@@ -825,6 +828,7 @@ static bool xb_find_xle_ip(char** conn_pods_list, int num_pods, char* xle_ip) {
     char cmd[256];
     char buf[1024];
     int xle_id = -1;
+    int i;
 
     snprintf(cmd, sizeof(cmd), "cat /nvram/dnsmasq.leases | grep WNXL11BWL | cut -d' ' -f2 | tr '\\n' ' '");
     cmd_exec(cmd, buf, sizeof(buf));
@@ -834,7 +838,7 @@ static bool xb_find_xle_ip(char** conn_pods_list, int num_pods, char* xle_ip) {
     }
 
     // Checking if any of the pods in the connected list is an XLE
-    for (int i=0; i<num_pods; i++) {
+    for (i=0; i<num_pods; i++) {
         if (strstr(buf, conn_pods_list[i])) {
             xle_id = i;
             break;
@@ -1011,6 +1015,7 @@ static void xmesh_xb(bool wfo) {
     char def_route[BUF_IF_NAME];
     char **pods_connected = NULL;
     int num_pods;
+    int i;
     bool all_good = true;
 
     LOGINFO("======================= MESH DIAGNOSTIC TOOL | XB ======================\n");
@@ -1098,7 +1103,7 @@ results:
 
     LOGINFO("========================================================================\n");
 
-    for (int i=0; i<num_pods; i++) {
+    for (i=0; i<num_pods; i++) {
         if (pods_connected[i])
             free(pods_connected[i]);
     }
