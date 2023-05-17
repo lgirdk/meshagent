@@ -196,6 +196,13 @@ MeshAgent_GetParamBoolValue
 	return TRUE;
     }
 
+    if (strcmp(ParamName, "Softwds") == 0)
+    {
+        MeshInfo("Softwds Enable get\n");
+        *pBool = g_pMeshAgent->MeshSoftwdsEnable;
+        return TRUE;
+    }
+
     MeshWarning(("Unsupported parameter '%s'\n"), ParamName);
 
     return FALSE;
@@ -668,7 +675,14 @@ MeshAgent_SetParamBoolValue
         MeshInfo("Pod ethernet bhaul mode set\n");
         Mesh_SetMeshEthBhaul(bValue,false,true);
         return TRUE; 
-    }    
+    }
+
+    if (strcmp(ParamName, "Softwds") == 0)
+    {
+        MeshInfo("Softwds rfc set\n");
+        Mesh_SetMeshSoftwds(bValue,false,true);
+        return TRUE;
+    }
 
     if (strcmp(ParamName, "XleModeCloudCtrlEnable") == 0)
     {

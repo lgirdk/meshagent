@@ -182,6 +182,12 @@
                                     <syntax>bool</syntax>
                                     <writable>true</writable>
                                 </parameter>
+                                <parameter>
+                                    <name>Softwds</name>
+                                    <type>boolean</type>
+                                    <syntax>bool</syntax>
+                                    <writable>true</writable>
+                                </parameter>
                             </parameters>
                         </object>
                     </objects>
