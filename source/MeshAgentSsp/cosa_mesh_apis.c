@@ -4215,10 +4215,12 @@ void* handleMeshEnable(void *Args)
               pthread_mutex_unlock(&mesh_handler_mutex);
               return NULL;
             }
+#if 0
             if(!radio_check()){
                   MeshError("Mesh Radio's are down, wait and check for the radio's to be up\n");
                   is_meshenable_waiting = true;
             }
+#endif
 	    if(is_band_steering_enabled()) {
                    if(set_wifi_boolean_enable("Device.WiFi.X_RDKCENTRAL-COM_BandSteering.Enable", "false")==FALSE) {
                         MeshError(("MESH_ERROR:Fail to enable Mesh because fail to turn off Band Steering\n"));
