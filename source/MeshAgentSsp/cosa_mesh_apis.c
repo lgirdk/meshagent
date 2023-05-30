@@ -4825,9 +4825,10 @@ static void *Mesh_sysevent_handler(void *data)
     async_id_t mesh_enable_asyncid;
     async_id_t mesh_url_asyncid;
     async_id_t wifi_txRate_asyncid;
-  #ifdef WAN_FAILOVER_SUPPORTED
+#ifdef WAN_FAILOVER_SUPPORTED
     async_id_t mesh_wfo_enabled_asyncid;
-  #endif
+    bool wfo_mode = false;
+#endif
 
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_RESET].sysStr,                     TUPLE_FLAG_EVENT);
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_RESET].sysStr,                     &wifi_init_asyncid);
@@ -4923,51 +4924,60 @@ static void *Mesh_sysevent_handler(void *data)
                          if ((g_pMeshAgent->meshEnable || svcagt_get_service_state(meshServiceName)))
                          {
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
-		             if(!is_uplink_tid_exist)
-                             {
+                     if(!is_uplink_tid_exist)
+                     {
 #endif
-                              MeshSync mMsg = {0};
+#if defined WAN_FAILOVER_SUPPORTED
+                                 if(!wfo_mode)
+                                 {
+#endif
+                                     MeshSync mMsg = {0};
 
-                              // Set sync message type
-                              mMsg.msgType = MESH_WIFI_RESET;
-                              mMsg.data.wifiReset.reset = true;
+                                     // Set sync message type
+                                     mMsg.msgType = MESH_WIFI_RESET;
+                                     mMsg.data.wifiReset.reset = true;
 
-                              // We filled our data structure so we can send it off
-                              msgQSend(&mMsg);
+                                     // We filled our data structure so we can send it off
+                                     msgQSend(&mMsg);
 
-                              /**
-                               * At this time, we are just restarting the mesh components when a wifi_init comes
-                               * in. At some point in the future, they may handle the wifi_init directly rather
-                               * than having to be re-started.
-                               */
-                              // shutdown
-                              if ( val[0] != '\0' && g_pMeshAgent->meshEnable)
-                              {
-                                  rc = strcmp_s("start", strlen("start"), val, &ind);
-                                  if((rc == EOK) && (!ind))
-                                  {
-                                       MeshInfo("Stopping meshwifi service\n");
-                                       svcagt_set_service_state(meshServiceName, false);
-                                  }
-                                  else
-                                  {
-                                       rc = strcmp_s("stop", strlen("stop"), val, &ind);
-                                       if((rc == EOK) && (!ind))
-                                       {
-                                            MeshInfo("Starting meshwifi service\n");
-                                            svcagt_set_service_state(meshServiceName, true);
-                                       }
-                                       else
-                                            MeshWarning("Unsupported option %s \n", val);
-                                  }
-                               }
+                                     /**
+                                     * At this time, we are just restarting the mesh components when a wifi_init comes
+                                     * in. At some point in the future, they may handle the wifi_init directly rather
+                                     * than having to be re-started.
+                                     */
+                                     // shutdown
+                                     if ( val[0] != '\0' && g_pMeshAgent->meshEnable)
+                                     {
+                                         rc = strcmp_s("start", strlen("start"), val, &ind);
+                                         if((rc == EOK) && (!ind))
+                                         {
+                                             MeshInfo("Stopping meshwifi service\n");
+                                             svcagt_set_service_state(meshServiceName, false);
+                                         }
+                                         else
+                                         {
+                                             rc = strcmp_s("stop", strlen("stop"), val, &ind);
+                                             if((rc == EOK) && (!ind))
+                                             {
+                                                 MeshInfo("Starting meshwifi service\n");
+                                                 svcagt_set_service_state(meshServiceName, true);
+                                             }
+                                             else
+                                                 MeshWarning("Unsupported option %s \n", val);
+                                         }
+                                     }
+#if defined WAN_FAILOVER_SUPPORTED
+                                 } else {
+                                     MeshInfo("Skip wifi reset while in WFO mode\n");
+                                 }
+#endif
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
-			       }
+                    }
 #endif
-                            }
-                            else {
-                                   MeshInfo("meshwifi.service is not running - not restarting\n");
-                            }
+                         }
+                         else {
+                             MeshInfo("meshwifi.service is not running - not restarting\n");
+                         }
             }
             else if (ret_val == MESH_WIFI_RADIO_CHANNEL)
             {
@@ -6324,14 +6334,17 @@ static void *Mesh_sysevent_handler(void *data)
                     MeshInfo("received sysevent MESH_WFO_ENABLED:%s\n",val);
                     if(!strncmp(val,"true",sizeof("true")))
                     {
+                        wfo_mode = true;
                         Send_MESH_WFO_ENABLED_Msg(true);
                     }
                     else if(!strncmp(val,"false",sizeof("false")))
                     {
+                        wfo_mode = false;
                         Send_MESH_WFO_ENABLED_Msg(false);
                     }
                     else
                     {
+                        wfo_mode = false;
                         MeshInfo("Unknow value for MESH_WFO_ENABLED");
                     }
                 }
