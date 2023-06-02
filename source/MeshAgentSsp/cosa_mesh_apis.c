@@ -217,6 +217,7 @@ rbusHandle_t handle;
 #define      ST_TR181_STATUS_COMPLETE 5
 
 #ifdef WAN_FAILOVER_SUPPORTED
+static bool wfo_mode = false;
 static bool meshWANStatus = false;
 static char *meshWANIfname = NULL;
 static bool rbusSubscribed = false;
@@ -2801,6 +2802,9 @@ void monitor_wfo_state(bool bStatus)
 {
     if(bStatus)
     {
+#ifdef WAN_FAILOVER_SUPPORTED
+        wfo_mode = true;
+#endif
         MeshInfo("Start the Black box log\n");
         // Run diagnostics every 90 seconds, dumps disabled, wfo enabled, delay diagnostics start by 45 seconds to
         // give enough time for WFO to be initialized
@@ -2808,6 +2812,9 @@ void monitor_wfo_state(bool bStatus)
     }
     else
     {
+#ifdef WAN_FAILOVER_SUPPORTED
+        wfo_mode = false;
+#endif
         MeshInfo("End Black box log\n");
         xmesh_diag_stop();
     }
@@ -4827,7 +4834,6 @@ static void *Mesh_sysevent_handler(void *data)
     async_id_t wifi_txRate_asyncid;
 #ifdef WAN_FAILOVER_SUPPORTED
     async_id_t mesh_wfo_enabled_asyncid;
-    bool wfo_mode = false;
 #endif
 
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_RESET].sysStr,                     TUPLE_FLAG_EVENT);
