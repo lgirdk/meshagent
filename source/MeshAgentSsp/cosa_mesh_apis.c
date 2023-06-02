@@ -2816,18 +2816,11 @@ void monitor_wfo_state(bool bStatus)
 void Send_MESH_WFO_ENABLED_Msg(bool bStatus)
 {
     MeshSync mMsg = {0};
-    int rc;
     static bool previousStatus = 0;
     if(previousStatus == bStatus)
     {
         MeshInfo("skip WFO status update\n");
         return;
-    }
-    MeshInfo("Info fcctl config --gre %d\n",!bStatus);
-    rc= v_secure_system( "fcctl config --gre %d",!bStatus);
-    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
-    {
-        MeshError("Error fcctl config --gre %d\n",!bStatus);
     }
     mMsg.msgType = MESH_WFO_ENABLED;
     mMsg.data.meshWFOEnabled.isWFOEnabledSet = true;
