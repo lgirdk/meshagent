@@ -43,6 +43,7 @@
 #include <sysevent/sysevent.h>
 #include <fcntl.h>
 #include <rbus.h>
+#include <sys/inotify.h>
 #ifdef WAN_FAILOVER_SUPPORTED
 #include "ccsp_psm_helper.h"
 #include "xmesh_diag.h"
@@ -139,11 +140,13 @@ const char meshServiceName[] = "meshwifi";
 const char meshDevFile[] = "/nvram/mesh-dev.flag";
 static bool gmssClamped = false;
 pthread_mutex_t mesh_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mesh_service_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define _DEBUG 1
 #define THREAD_NAME_LEN 16 //length is restricted to 16 characters, including the terminating null byte
 
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED) || defined(GATEWAY_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 extern char g_Subsystem[32];
+static bool gMeshRestart = false;
 
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 #define      RBUS_DEVICE_MODE        "Device.X_RDKCENTRAL-COM_DeviceControl.DeviceNetworkingMode"
@@ -2541,7 +2544,13 @@ void meshSetSyscfg(bool enable, bool commitSyscfg)
 {
     int i =0;
     FILE *fpMeshFile = NULL;
-
+#ifdef RDKB_EXTENDER_ENABLED
+   if(!enable)
+   {
+       MeshInfo("%s Mesh must be enabled always in the extender device\n",__FUNCTION__);
+       enable = true;
+   }
+#endif
     MeshInfo("%s Commitsyscfg:%d Setting mesh enable in syscfg to %d\n",
         __FUNCTION__,commitSyscfg,enable);
     // Always commit to syscfg DB in XB3 to keep the syscfg DB of Arm and Atom in sync
@@ -3155,6 +3164,48 @@ int getRbusStaBssId(unsigned int index)
     return ret;
 }
 
+void *Mode_change_mesh_restart()
+{
+    //restart mesh
+    int fd,wd;
+    struct timeval tv;
+    fd_set fds;
+
+    tv.tv_sec = 120;
+    tv.tv_usec = 0;
+    pthread_detach(pthread_self());
+
+    gMeshRestart = true;
+    fd = inotify_init();
+    if (fd == -1) {
+        gMeshRestart = false;
+        MeshInfo("Restart Mesh failed during inotify_init\n");
+	return NULL;
+    }
+    wd = inotify_add_watch(fd, "/tmp/mesh_agent_stop_check", IN_DELETE_SELF);
+    FD_ZERO(&fds);
+    FD_SET(fd, &fds);
+    if((wd == -1) || (select(fd + 1, &fds, NULL, NULL, &tv)!= -1) ) {
+	//wd = -1 is file not present so restart mesh instantly
+	//or wait for 120 or wait till the file is deleted
+        pthread_mutex_lock(&mesh_service_handler_mutex);
+        MeshInfo("Restart Mesh \n");
+        if (svcagt_set_service_restart (meshServiceName) != 0)
+            MeshInfo("Restart Mesh failed\n");
+        pthread_mutex_unlock(&mesh_service_handler_mutex);
+	if(!access("/tmp/mesh_handler_stop_check", F_OK )) {
+            remove("/tmp/mesh_handler_stop_check");
+            MeshInfo("Restart Mesh file is present even after 120 secsonds deleting it..\n");
+        }
+    }
+    inotify_rm_watch(fd, wd);
+    close(fd);
+
+    gMeshRestart = false;
+    return NULL;
+
+}
+
 void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEventSubscription_t* subscription)
 {
     (void)handle;
@@ -3174,6 +3225,8 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     int new_device_mode;
+    pthread_t tid;
+    char thread_name[THREAD_NAME_LEN] = { 0 };
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     bool is_connect_timeout;
@@ -3194,7 +3247,6 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 
     MeshInfo("%s:%d Rbus event name=%s\n",__FUNCTION__, __LINE__, event->name);
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
-    int err;
     int rc =-1;
 
     if (strcmp(event->name,RBUS_DEVICE_MODE) == 0)
@@ -3215,10 +3267,21 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         if(new_device_mode != device_mode)
         {
             device_mode = new_device_mode;
-            //restart mesh
-            MeshInfo("Restart Mesh");
-            if ((err = svcagt_set_service_restart (meshServiceName)) != 0)
-                MeshInfo("Restart Mesh failed");
+            //restart mesh in a new thread with mutex to avoid mesh getting disabled
+	    if(gMeshRestart == false) {
+                if(pthread_create(&tid, NULL, Mode_change_mesh_restart, NULL) != 0)
+                    MeshInfo("Restart Mesh thread creation failed");
+	        else {
+                    strcpy_s(thread_name, sizeof(thread_name), "DevModeRestart");
+                    if (pthread_setname_np(tid, thread_name) == 0)
+                        MeshInfo("Mesh_sysevent_handler thread name %s set successfully\n", thread_name);
+                    else
+                        MeshError("%s error occurred while setting Mesh_sysevent_handler thread name\n", strerror(errno));
+	        }
+	    }
+	    else
+                MeshInfo("thread is already running ");
+
         }
     }
      else
@@ -3283,7 +3346,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 
 	    if (g_pMeshAgent->meshEnable)
             {
-	        if ((err = svcagt_set_service_state(meshServiceName, true)) != 0)
+                if ((err = svcagt_set_service_state(meshServiceName, true)) != 0)
                     MeshWarning("Start Mesh failed");
 	    }
 	    else
@@ -3926,6 +3989,7 @@ void* handleMeshEnable(void *Args)
             // Check if the is_meshenable_waiting is true, before starting the mesh services
             if ((!is_meshenable_waiting) && (err = svcagt_get_service_state(meshServiceName)) == 0)
             {
+                pthread_mutex_lock(&mesh_service_handler_mutex);
                 // returns "0" on success
                 if ((err = svcagt_set_service_state(meshServiceName, true)) != 0)
                 {
@@ -3935,10 +3999,12 @@ void* handleMeshEnable(void *Args)
                     meshSetSyscfg(0, true);
                     success = FALSE;
                 }
+                pthread_mutex_unlock(&mesh_service_handler_mutex);
             }
          } else {
             // This will only work if this service is started *AFTER* CcspWifi
             // If the service is running, stop it
+            pthread_mutex_lock(&mesh_service_handler_mutex);
             if ((err = svcagt_get_service_state(meshServiceName)) == 1)
             {
                 // returns "0" on success
@@ -3949,6 +4015,7 @@ void* handleMeshEnable(void *Args)
                     success = FALSE;
                 }
             }
+            pthread_mutex_unlock(&mesh_service_handler_mutex);
         }
 
         if (success) {
