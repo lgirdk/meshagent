@@ -1439,7 +1439,6 @@ static void* msgQServer(void *data)
                 MeshError("Mesh Queue accept failure\n");
                 return NULL;
             }
-
             //inform user of socket number - used in send and receive commands
             MeshInfo("New Mesh Queue connection, socket fd is %d\n", new_socket);
 
@@ -1454,6 +1453,7 @@ static void* msgQServer(void *data)
                     clientSocketsMask |= (1 << i);
                     MeshInfo("Adding connected client to list of sockets as %d\n" , i);
                     Mesh_sendDhcpLeaseSync();
+                    Mesh_sendRFCUpdate("PodEthernetGreBackhaul.Enable", "true", rfc_boolean);
                     break;
                 }
             }
@@ -1512,7 +1512,7 @@ static void* msgQServer(void *data)
  */
 static int msgQSend(MeshSync *data)
 {
-    int i;
+    int i, ret = 0;
 
     for (i = 0; i < MAX_CONNECTED_CLIENTS; i++)
     {
@@ -1527,11 +1527,13 @@ static int msgQSend(MeshSync *data)
                 close(sd);
                 clientSockets[i] = 0;
                 clientSocketsMask &= ~(1 << i);
-            }
+           }
+           else
+               ret = 1;
         }
     }
 
-    return 0;
+    return ret;
 }
 #else
 /**
@@ -4020,18 +4022,24 @@ void* handleMeshEnable(void *Args)
 
         if (success) {
             //MeshInfo("Meshwifi has been %s\n",(enable?"enabled":"disabled"));
-            MeshInfo("MESH_STATUS:%s\n",(enable?"enabled":"disabled"));
+            MeshInfo("MESH_STATUS:%s\n",(enable?"enabled":"disabled"));//
 
             // Update the data model
+            if (!((g_pMeshAgent->meshStatus == MESH_WIFI_STATUS_FULL) && enable))
+            {
+                g_pMeshAgent->meshStatus = (enable?MESH_WIFI_STATUS_INIT:MESH_WIFI_STATUS_OFF);
+                // Send sysevent notification
+                /*Coverity Fix CID:69958 DC.STRING_BUFFER */
+                snprintf(outBuf,sizeof(outBuf), "MESH|%s", (enable?"true":"false"));
+                Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_ENABLE].sysStr, outBuf, 0, true);
+                /*Coverity Fix CID:69958 DC.STRING_BUFFER */
+                snprintf(outBuf,sizeof(outBuf), "MESH|%s", meshWifiStatusArr[(enable?MESH_WIFI_STATUS_INIT:MESH_WIFI_STATUS_OFF)].mStr);
+                Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_STATUS].sysStr, outBuf, 0, true);
+            }
+            else
+               MeshInfo("Skipped MESH_WIFI_STATUS change since this is just meshAgent restart\n");
+
             g_pMeshAgent->meshEnable = enable;
-            g_pMeshAgent->meshStatus = (enable?MESH_WIFI_STATUS_INIT:MESH_WIFI_STATUS_OFF);
-            // Send sysevent notification
-            /*Coverity Fix CID:69958 DC.STRING_BUFFER */
-            snprintf(outBuf,sizeof(outBuf), "MESH|%s", (enable?"true":"false"));
-            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_ENABLE].sysStr, outBuf, 0, true);
-            /*Coverity Fix CID:69958 DC.STRING_BUFFER */
-            snprintf(outBuf,sizeof(outBuf), "MESH|%s", meshWifiStatusArr[(enable?MESH_WIFI_STATUS_INIT:MESH_WIFI_STATUS_OFF)].mStr);
-            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_WIFI_STATUS].sysStr, outBuf, 0, true);
 	    last_set = enable;
         } else {
             MeshError("Error %d %s Mesh Wifi\n", err, (enable?"enabling":"disabling"));
@@ -4725,7 +4733,10 @@ static void Mesh_sendRFCUpdate(const char *param, const char *val, eRfcType type
     }
     mMsg.data.rfcUpdate.type = type;
     MeshInfo("RFC_UPDATE: param: %s val:%s type=%d\n",mMsg.data.rfcUpdate.paramname, mMsg.data.rfcUpdate.paramval, mMsg.data.rfcUpdate.type);
-    msgQSend(&mMsg);
+    if (!msgQSend(&mMsg))
+    {
+        MeshInfo("RFC_UPDATE: Failed param: %s val:%s type=%d\n",mMsg.data.rfcUpdate.paramname, mMsg.data.rfcUpdate.paramval, mMsg.data.rfcUpdate.type);
+    }
 }
 
 /**
