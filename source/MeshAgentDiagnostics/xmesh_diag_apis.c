@@ -44,6 +44,7 @@ typedef struct _diag_args_t {
     bool dumps_enabled;
     bool wfo;
     int  delay;
+    device_model_t model;
 } diag_args_t;
 
 typedef struct _count_t {
@@ -80,6 +81,40 @@ static bool   g_xmesh_active = false;
 static time_t g_start_time=0;
 
 /**
+ * Root Servers based on https://www.iana.org/domains/root/servers
+ */
+static char *g_root_servers[] = {
+    "a.root-servers.net",
+    "b.root-servers.net",
+    "c.root-servers.net",
+    "d.root-servers.net",
+    "e.root-servers.net",
+    "f.root-servers.net",
+    /* "g.root-servers.net", */
+    "h.root-servers.net",
+    "i.root-servers.net",
+    "j.root-servers.net",
+    "k.root-servers.net",
+    "l.root-servers.net",
+    "m.root-servers.net"
+};
+static char *g_root_servers_ipv4[] = {
+    "198.41.0.4",
+    "199.9.14.201",
+    "192.33.4.12",
+    "199.7.91.13",
+    "192.203.230.10",
+    "192.5.5.241",
+    /* "192.112.36.4", */
+    "198.97.190.53",
+    "192.36.148.17",
+    "192.58.128.30",
+    "193.0.14.129",
+    "199.7.83.42",
+    "202.12.27.33"
+};
+
+/**
  * Identify Device model
  */
 static device_model_t check_model() {
@@ -91,6 +126,7 @@ static device_model_t check_model() {
 
     while (fgets(line, sizeof(line), fp) != NULL) {
         if (strstr(line, "imagename:")) {
+            LOGINFO("Version: %s", line+10);
             if (strstr(line,"WNXL11BWL")) {
                 return MODEL_WNXL11BWL;
             } else if (strstr(line, "SIM")) {
@@ -189,6 +225,33 @@ static bool cmd_ping(char* dest, char* iface, char* desc) {
         LOGSUCCESS("%s is reachable via %s interface\n", desc ? desc : dest, iface ? iface : "default");
         return true;
     }
+}
+
+/**
+ * Pings any random root server to confirm internet connectivity.
+ *
+ * @param[in]   iface   Optionally pass in the interface if you need to ping through any specific interface.
+ *                      To use defaul interface, pass in NULL
+ */
+static bool cmd_ping_root_serv(char* iface) {
+    int r;
+    int trials=2;
+    int cnt_serv = sizeof(g_root_servers)/sizeof(g_root_servers[0]);
+
+    LOGINFO("Checking internet connectivity over %s interface\n", iface ? iface : "default");
+    while (trials--) {
+        r = rand() % cnt_serv;
+        if (cmd_ping(g_root_servers[r], iface, NULL)) {
+            return true;
+        }
+        LOGINFO("Attempting to direcly ping %s root server IP %s\n", g_root_servers[r], g_root_servers_ipv4[r]);
+        if (cmd_ping(g_root_servers_ipv4[r], iface, NULL)) {
+            return true;
+        }
+        LOGINFO("%d attempts remaining\n", trials);
+    }
+    LOGERROR("Internet connectivity check over %s interface failed\n", iface ? iface : "default");
+    return false;
 }
 
 /**
@@ -543,7 +606,7 @@ static bool xle_validate_wwan0() {
         LOGINFO("Cellular radio environment condition : %s\n", buf);
     }
 
-    if (!cmd_ping("8.8.8.8", "wwan0", NULL)) {
+    if (!cmd_ping_root_serv("wwan0")) {
         return false;
     }
 
@@ -698,10 +761,9 @@ static void xmesh_xle(bool wfo) {
     if (!xle_validate_wwan0()) {
         g_count.xle_wwan0_offline++;
         all_good = false;
-        goto results;
     }
 
-    if (!cmd_ping("8.8.8.8", NULL, NULL)) {
+    if (!cmd_ping_root_serv(NULL)) {
         g_count.no_internet++;
         all_good = false;
         goto results;
@@ -992,9 +1054,9 @@ static bool xb_check_wfo_mode(bool wfo) {
  *    is an XLE, don't fail as XLE could be connected behind any other connected pod.
  * 4. If any XLE found, check ping to local ip, find the gre tunnels and verify its configurations etc.
  * 5. Verify brRWAN has IP, and verify ping to 192.168.246.1 works in WFO mode
- * 6. Check ping to 8.8.8.8 via brRWAN works in WFO mode.
+ * 6. Check ping to root server via brRWAN works in WFO mode.
  * 7. Check default route in WFO mode
- * 8. Check ping to 8.8.8.8 via default route works
+ * 8. Check ping to root server via default route works
  *
  * @param[in]   wfo     Should be set to true if the device is in wan failover mode
  */
@@ -1057,14 +1119,14 @@ static void xmesh_xb(bool wfo) {
             all_good = false;
         }
 
-        if (!cmd_ping("8.8.8.8", "brRWAN", NULL)) {
+        if (!cmd_ping_root_serv("brRWAN")) {
             g_count.xb_no_internet_brrwan++;
             all_good = false;
             goto results;
         }
     }
 
-    if (!cmd_ping("8.8.8.8", NULL, NULL)) {
+    if (!cmd_ping_root_serv( NULL)) {
         g_count.no_internet++;
         all_good = false;
     }
@@ -1102,6 +1164,7 @@ results:
 
 static void* start_diagnostics(void* _args) {
     diag_args_t *diag_args = (diag_args_t *)_args;
+    char uptime[128];
 
     if (diag_args->delay > 0) {
         LOGINFO("Delayed diagnostics enabled. Waiting %d seconds.\n", diag_args->delay);
@@ -1109,8 +1172,10 @@ static void* start_diagnostics(void* _args) {
     }
 
     while (g_xmesh_active) {
+        cmd_exec("uptime", uptime, sizeof(uptime));
+        LOGINFO("uptime -%s\n", uptime);
         pthread_mutex_lock(&xmesh_mutex);
-        switch(check_model()) {
+        switch(diag_args->model) {
             case MODEL_SIMULATED:
             case MODEL_WNXL11BWL:
                 if(diag_args->dumps_enabled)
@@ -1151,7 +1216,9 @@ void xmesh_diag_start(int interval, bool dumps_enabled, bool wfo, int delay) {
     diag_args.dumps_enabled = dumps_enabled;
     diag_args.wfo = wfo;
     diag_args.delay = delay;
+    diag_args.model = check_model();
 
+    srand(time(0));
     if (g_xmesh_active) {
         LOGINFO("Diagnostics session already in progress, close existing session before starting new\n");
         return;
