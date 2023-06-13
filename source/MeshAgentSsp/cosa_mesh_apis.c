@@ -943,20 +943,20 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     {
         MeshInfo(("Received MESH_TRIGGER_DISASSOC\n"));
         int rc = -1;
-        int connect = true;
+        int connect = rxMsg.data.triggerStatus.status;
         rbusValue_t value;
 
         rbusValue_Init(&value);
-        rbusValue_SetBoolean(value, connect);
+        rbusValue_SetUInt32(value, connect);
 
         rc = rbus_set(handle, MESH_STA_DISCONNECT_EVENT, value, NULL);
         if(rc == RBUS_ERROR_SUCCESS)
         {
-            MeshInfo(("Successfully Published MESH_TRIGGER_DISASSOC\n"));
+            MeshInfo("Successfully Published MESH_TRIGGER_DISASSOC val:%d\n",connect);
         }
         else
         {
-            MeshInfo(("Error in publishing MESH_TRIGGER_DISASSOC\n"));
+            MeshInfo("Error in publishing MESH_TRIGGER_DISASSOC val:%d\n",connect);
         }
     }
     break;

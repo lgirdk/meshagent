@@ -62,7 +62,7 @@
 
 #define WIFI_STA_INTERFACE_NAME          "Device.WiFi.STA.%d.InterfaceName"
 #define WIFI_STA_BSSID                   "Device.WiFi.STA.%d.Bssid"
-#define MESH_STA_DISCONNECT_EVENT        "Device.WiFi.STATriggerDisconnection"
+#define MESH_STA_DISCONNECT_EVENT        "Device.WiFi.X_RDK_STATriggerDisconnection"
 #define MAX_BSS_ID                       6
 #define EVENT_MESH_BACKHAUL_IFNAME       "Device.X_RDK_MeshAgent.MeshBackHaul.Ifname"
 #define      AP_ACTIVE                0
