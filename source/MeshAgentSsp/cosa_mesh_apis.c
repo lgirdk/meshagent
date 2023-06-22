@@ -980,6 +980,7 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
         {
             MeshInfo("Error in publishing MESH_TRIGGER_DISASSOC val:%d\n",connect);
         }
+        rbusValue_Release(value);
     }
     break;
 #endif
@@ -3628,6 +3629,7 @@ int get_sta_active_interface_name()
                 sscanf(name, RBUS_STA_STATUS_INDEX, &index);
                 if (temp_buff == NULL) {
                     MeshError("%s:%d Rbus get string failure len=%d\n", __FUNCTION__, __LINE__, len);
+                    rbusProperty_Release(outputVals);
                     return -1;
                 }
                 memcpy(&connect_status, temp_buff, len);
