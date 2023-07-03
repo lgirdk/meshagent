@@ -3379,6 +3379,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         if(new_device_mode != device_mode)
         {
             handle_led_status(MESH_CONTROLLER_CONNECTING, new_device_mode);
+            meshETHBhaulUplink = false;
             device_mode = new_device_mode;
             MeshInfo("Device Mode changed, Sending the notification to managers\n");
             Mesh_sendCurrentSta();
