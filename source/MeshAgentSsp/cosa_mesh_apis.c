@@ -2432,6 +2432,21 @@ static void Mesh_setCacheStatusSyscfg(bool enable)
     }
 }
 
+static void Mesh_setSecuritySchemaLegacySyscfg(bool enable)
+{
+    int i = 0;
+
+    MeshInfo("%s: Trying to set  syscfg to [%s]\n", __FUNCTION__, enable ? "true" : "false");
+    for (i = 0; i < 5; i++)
+    {
+        if (!Mesh_SysCfgSetStr("mesh_security_legacy", (enable ? "true" : "false"), true))
+        {
+            MeshInfo("mesh_security_legacy syscfg set passed in %d attempt\n", i+1);
+            break;
+        }
+    }
+}
+
 static bool meshSetMeshRetrySyscfg(bool enable)
 {
     int i = 0;
@@ -3781,6 +3796,23 @@ void Mesh_SetCacheStatus(bool enable, bool init, bool commitSyscfg)
 }
 
 /**
+ * @brief Mesh Legacy Security Schema Set Enable/Disable
+ *
+ * This function will enable/disable the Mesh Legacy Security Schema
+ */
+void Mesh_SetSecuritySchemaLegacy(bool enable, bool init, bool commitSyscfg)
+{
+    if (init || Mesh_GetEnabled("mesh_security_legacy") != enable)
+    {
+        MeshInfo("%s: Enable:%d, Init:%d, Commit:%d.\n", __FUNCTION__, enable, init, commitSyscfg);
+        if (commitSyscfg)
+            Mesh_setSecuritySchemaLegacySyscfg(enable);
+        g_pMeshAgent->SecuritySchemaLegacyEnable = enable;
+        Mesh_sendRFCUpdate("MeshSecuritySchemaLegacy.Enable", enable ? "true" : "false", rfc_boolean);
+    }
+}
+
+/**
  * @brief Mesh Retry Connection Optimization Enable/Disable
  *
  * This function will enable/disable the Mesh Optimized connection retry
@@ -4584,6 +4616,38 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
               MeshInfo("OVS status error from syscfg , setting default\n");
               Mesh_SetOVS(false,true,true);
            }
+        }
+    }
+
+    out_val[0]='\0';
+    if (Mesh_SysCfgGetStr("mesh_security_legacy", out_val, sizeof(out_val)) != 0)
+    {
+        MeshInfo("Syscfg error, Setting mesh_security_legacy to default\n");
+        Mesh_SetSecuritySchemaLegacy(true, true, true);
+    }
+    else
+    {
+        rc = strcmp_s("true", strlen("true"), out_val, &ind);
+        ERR_CHK(rc);
+        if ((ind == 0) && (rc == EOK))
+        {
+            MeshInfo("Setting initial mesh_security_legacy to true\n");
+            Mesh_SetSecuritySchemaLegacy(true, true, false);
+        }
+        else
+        {
+            rc = strcmp_s("false", strlen("false"), out_val, &ind);
+            ERR_CHK(rc);
+            if ((ind == 0) && (rc == EOK))
+            {
+                MeshInfo("Setting initial mesh_security_legacy to false\n");
+                Mesh_SetSecuritySchemaLegacy(false, true, false);
+            }
+            else
+            {
+                MeshInfo("mesh_security_legacy error, setting default\n");
+                Mesh_SetSecuritySchemaLegacy(true, true, true);
+            }
         }
     }
 

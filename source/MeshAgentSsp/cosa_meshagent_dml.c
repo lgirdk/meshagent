@@ -366,6 +366,60 @@ MeshGREBackhaulCache_GetParamBoolValue
     prototype:
 
         BOOL
+        MeshSecuritySchemaLegacy_GetParamBoolValue
+            (
+                ANSC_HANDLE                 hInsContext,
+                char*                       ParamName,
+                BOOL*                       pBool
+            );
+
+    description:
+
+        This function is called to retrieve Boolean parameter value for RFC MeshSecuritySchemaLegacy
+
+    argument:   ANSC_HANDLE                 hInsContext,
+                The instance handle;
+
+                char*                       ParamName,
+                The parameter name;
+
+                BOOL*                       pBool
+                The buffer of returned boolean value;
+
+    return:     TRUE if succeeded.
+
+**********************************************************************/
+BOOL
+MeshSecuritySchemaLegacy_GetParamBoolValue
+    (
+        ANSC_HANDLE                 hInsContext,
+        char*                       ParamName,
+        BOOL*                       pBool
+    )
+{
+    UNREFERENCED_PARAMETER(hInsContext);
+    errno_t rc = -1;
+    int ind = -1;
+
+    rc = strcmp_s("Enable", strlen("Enable"), ParamName, &ind);
+    ERR_CHK(rc);
+    if ((ind == 0) && (rc == EOK))
+    {
+        *pBool = g_pMeshAgent->SecuritySchemaLegacyEnable;
+        return TRUE;
+    }
+
+    MeshWarning("Unsupported parameter '%s'\n", ParamName);
+    return FALSE;
+}
+
+/**********************************************************************
+
+    caller:     owner of this object
+
+    prototype:
+
+        BOOL
         MeshRetryReduction_GetParamBoolValue
             (
                 ANSC_HANDLE                 hInsContext,
@@ -852,6 +906,61 @@ MeshGREBackhaulCache_SetParamBoolValue
     {
         MeshInfo("Cache Status flag set to [%s]\n", bValue ? "true" : "false");
         Mesh_SetCacheStatus(bValue, false, true);
+        return TRUE;
+    }
+
+    MeshWarning("Unsupported parameter '%s'\n", ParamName);
+    return FALSE;
+}
+
+/**********************************************************************
+
+    caller:     owner of this object
+
+    prototype:
+
+        BOOL
+        MeshSecuritySchemaLegacy_SetParamBoolValue
+            (
+                ANSC_HANDLE                 hInsContext,
+                char*                       ParamName,
+                BOOL                        bValue
+            );
+
+    description:
+
+        This function is called to set BOOL parameter value for RFC SecuritySchemaLegacy
+
+    argument:   ANSC_HANDLE                 hInsContext,
+                The instance handle;
+
+                char*                       ParamName,
+                The parameter name;
+
+                BOOL                        bValue
+                The updated BOOL value;
+
+    return:     TRUE if succeeded.
+
+**********************************************************************/
+BOOL
+MeshSecuritySchemaLegacy_SetParamBoolValue
+    (
+        ANSC_HANDLE                 hInsContext,
+        char*                       ParamName,
+        BOOL                        bValue
+    )
+{
+    UNREFERENCED_PARAMETER(hInsContext);
+    errno_t rc = -1;
+    int ind = -1;
+
+    rc = strcmp_s("Enable", strlen("Enable"), ParamName, &ind);
+    ERR_CHK(rc);
+    if ((ind == 0) && (rc == EOK))
+    {
+        MeshInfo("SecuritySchemaLegacy flag set to [%s]\n", bValue ? "true" : "false");
+        Mesh_SetSecuritySchemaLegacy(bValue, false, true);
         return TRUE;
     }
 

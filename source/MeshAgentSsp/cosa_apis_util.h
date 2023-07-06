@@ -91,6 +91,7 @@ bool Mesh_SetOVS(bool enable, bool init, bool commitSyscfg);
 bool Mesh_SetMeshEthBhaul(bool enable, bool init, bool commitSyscfg);
 bool Mesh_SetXleModeCloudCtrlEnable(bool enable, bool init, bool commitSyscfg);
 void Mesh_SetCacheStatus(bool enable, bool init, bool commitSyscfg);
+void Mesh_SetSecuritySchemaLegacy(bool enable, bool init, bool commitSyscfg);
 bool Mesh_SetMeshRetryOptimized(bool enable, bool init, bool commitSyscfg);
 void Mesh_SendEthernetMac(char *mac);
 BOOL set_wifi_boolean_enable(char *parameterName, char *parameterValue);
