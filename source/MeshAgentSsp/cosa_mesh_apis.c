@@ -932,8 +932,9 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_BRHOME_IP:
     {
-        MeshInfo("Received event MESH_BRHOME_IP %s", rxMsg.data.brhomeIP.ip);
+        MeshInfo("Received event MESH_BRHOME_IP %s\n", rxMsg.data.brhomeIP.ip);
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_BRHOME_IP].sysStr, rxMsg.data.brhomeIP.ip, 0, false);
+        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
     }
     break;
     case MESH_ADD_DNSMASQ:
@@ -3370,11 +3371,11 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
             if(ping_ip(MESH_BHAUL_INETADDR))
                 MeshInfo("Gateway Ip is reachable, still changing the device mode to gateway\n");
             snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
+            publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
         }
 	else
             snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_XLE_BRIDGE);
 
-        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
         if(new_device_mode != device_mode)
         {
             handle_led_status(MESH_CONTROLLER_CONNECTING, new_device_mode);
@@ -6877,11 +6878,13 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     device_mode = Mesh_SysCfgGetInt("Device_Mode");
     if (device_mode == GATEWAY_MODE)
+    {
         snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
+        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
+    }
     else
         snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_XLE_BRIDGE);
 
-    publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
     MeshInfo("Current device mode = %d\n",device_mode);
 #endif
 #endif
