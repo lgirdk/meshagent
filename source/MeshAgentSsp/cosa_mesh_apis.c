@@ -1657,20 +1657,20 @@ static int msgQSend(MeshSync *data)
 /**
  * @brief Mesh Agent Get Url
  *
- * This function will set the url and notify the Mesh vendor of the change
+ * This function will get the url
  */
 int Mesh_GetUrl(char *retBuf, int bufSz)
 {
-    static unsigned char out_val[128];
     errno_t rc = -1;
 
     // MeshInfo("Entering into %s\n",__FUNCTION__);
 
-    out_val[0]='\0';
-    if(Mesh_SysCfgGetStr("mesh_url", out_val, sizeof(out_val)) != 0)
+    Mesh_SysCfgGetStr("mesh_url", retBuf, bufSz);
+
+    if (retBuf[0] == 0)
     {
         // syscfg value is blank, send url default value
-        rc = strcpy_s(out_val, sizeof(out_val), urlDefault);
+        rc = strcpy_s(retBuf, bufSz, urlDefault);
         if(rc != EOK)
         {
            ERR_CHK(rc);
@@ -1678,13 +1678,7 @@ int Mesh_GetUrl(char *retBuf, int bufSz)
            return false;
         }
     }
-    rc = strcpy_s(retBuf, (unsigned int)bufSz, out_val);
-    if(rc != EOK)
-    {
-        ERR_CHK(rc);
-        MeshError("Error in copying url value\n");
-        return false;
-    }
+
     return true;
 }
 
