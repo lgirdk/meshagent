@@ -141,7 +141,7 @@ token_t sysevent_token;
 static pthread_t sysevent_tid;
 
 const char urlOld[] = "NOC-URL-DEV";
-const char urlDefault[] = "NOC-URL-PROD";
+const char urlDefault[] = "ssl:wildfire.plume.tech:443";
 const char meshServiceName[] = "meshwifi";
 const char meshDevFile[] = "/nvram/mesh-dev.flag";
 static bool gmssClamped = false;
