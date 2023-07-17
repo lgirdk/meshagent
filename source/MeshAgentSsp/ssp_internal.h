@@ -68,8 +68,6 @@
 #define EVENT_MESH_BACKHAUL_IFNAME       "Device.X_RDK_MeshAgent.MeshBackHaul.Ifname"
 #define      AP_ACTIVE                0
 #define      STA_ACTIVE               1
-#define      GATEWAY_MODE             0
-#define      EXTENDER_MODE            1
 /*From wifi_hal_generic.h.
  * connection status of STA
  * */

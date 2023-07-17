@@ -43,7 +43,9 @@ extern MeshStaStatus_node sta;
 
 #if defined(ONEWIFI)
 extern MeshSync_MsgItem meshSyncMsgArr[];
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
 static bool is_connected_via_eth = false;
+#endif
 #ifndef RDK_LED_MANAGER_EXIST
 LedAnimation_Msg  meshLedAnimationArr[] = {
     {SOLID,                            "SOLID"},
@@ -594,7 +596,7 @@ void  led_state(eLedColor color,eLedAnimation animation)
     }
 }
 #endif
-
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
 bool is_eth_connected()
 {
     return is_connected_via_eth;
@@ -605,7 +607,7 @@ bool is_eth_connected()
  *
  * This function will control the led based on connection status
  */
-void  handle_led_status(eMeshSyncStatus status)
+void  handle_led_status(eMeshSyncStatus status, int devicemode)
 {
     static bool ctr_status = false;
     static eMeshSyncStatus current_status;
@@ -630,7 +632,10 @@ void  handle_led_status(eMeshSyncStatus status)
 #ifndef RDK_LED_MANAGER_EXIST
             led_state(OFF,SOLID);
 #endif
-            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECTED, 0, false);
+            if(devicemode == EXTENDER_MODE)
+                Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECTED, 0, false);
+
+            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_CONTROLLER_STATUS].sysStr,CONTROLLER_CONNECTED, 0, false);
         break;
         case MESH_CONTROLLER_CONNECTING:
 	    ctr_status = false;
@@ -638,7 +643,10 @@ void  handle_led_status(eMeshSyncStatus status)
 #ifndef RDK_LED_MANAGER_EXIST
             led_state(WHITE,BLINKING_SLOW);
 #endif
-            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECTING, 0, false);
+            if(devicemode == EXTENDER_MODE)
+                Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECTING, 0, false);
+
+            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_CONTROLLER_STATUS].sysStr,CONTROLLER_CONNECTING, 0, false);
             break;
         case MESH_CONTROLLER_FAILURE:
 	    ctr_status = false;
@@ -646,14 +654,20 @@ void  handle_led_status(eMeshSyncStatus status)
 #ifndef RDK_LED_MANAGER_EXIST
             led_state(OFF,SOLID);
 #endif
-            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECT_FAILURE, 0, false);
+            if(devicemode == EXTENDER_MODE)
+                Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECT_FAILURE, 0, false);
+
+            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_CONTROLLER_STATUS].sysStr,CONTROLLER_CONNECT_FAILURE, 0, false);
             break;
         case MESH_STA_DISCONNECTED:
             MeshInfo("Led Blink white, Sta Disconnect\n");
 #ifndef RDK_LED_MANAGER_EXIST
             led_state(WHITE,BLINKING_SLOW);
 #endif
-            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,STA_DISCONNECTED, 0, false);
+            if(devicemode == EXTENDER_MODE)
+                Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,STA_DISCONNECTED, 0, false);
+
+            Mesh_SyseventSetStr(meshSyncMsgArr[MESH_CONTROLLER_STATUS].sysStr,STA_DISCONNECTED, 0, false);
             break;
         case MESH_STA_CONNECTED:
             if(ctr_status == true)
@@ -661,7 +675,10 @@ void  handle_led_status(eMeshSyncStatus status)
 #ifndef RDK_LED_MANAGER_EXIST
                 led_state(OFF,SOLID);
 #endif
-                Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECTED, 0, false);
+                if(devicemode == EXTENDER_MODE)
+                     Mesh_SyseventSetStr(meshSyncMsgArr[MESH_SYNC_STATUS].sysStr,CONTROLLER_CONNECTED, 0, false);
+
+                Mesh_SyseventSetStr(meshSyncMsgArr[MESH_CONTROLLER_STATUS].sysStr,CONTROLLER_CONNECTED, 0, false);
             }
             break;
         case MESH_MQTT_RECVD:
@@ -677,6 +694,7 @@ void  handle_led_status(eMeshSyncStatus status)
     }
     current_status = status;
 }
+#endif //WAN_FAILOVER_SUPPORTED && RDKB_EXTENDER_ENABLED
 #endif // ONEWIFI
 #endif // WAN_FAILOVER_SUPPORTED || ONEWIFI || GATEWAY_FAILOVER_SUPPORTED
 #endif // _RDKB_MESH_UTILS_C_

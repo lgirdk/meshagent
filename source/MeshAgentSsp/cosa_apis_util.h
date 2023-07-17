@@ -41,6 +41,8 @@
 #define      MESH_XLE_BRIDGE          "br-home"
 #define      ETHBACKHAUL0_VLAN        "g-eth0.123"
 #define      ETHBACKHAUL1_VLAN        "g-eth1.123"
+#define      GATEWAY_MODE             0
+#define      EXTENDER_MODE            1
 
 #ifndef RDK_LED_MANAGER_EXIST
 typedef enum {
@@ -121,8 +123,8 @@ int udhcpc_pid(char *ifname);
 #ifndef RDK_LED_MANAGER_EXIST
 void  led_state(eLedColor color,eLedAnimation animation);
 #endif
-#if defined(ONEWIFI)
-void  handle_led_status(eMeshSyncStatus status);
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
+void  handle_led_status(eMeshSyncStatus status, int devicemode);
 bool is_eth_connected();
 #endif
 #endif /* MESHAGENT_SOURCE_MESHAGENT_MESHUTILS_H_ */

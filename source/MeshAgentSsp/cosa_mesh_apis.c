@@ -350,6 +350,7 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
 #ifdef ONEWIFI
     ,
     {MESH_SYNC_STATUS,                      "MESH_SYNC_STATUS",                     "mesh_led_status"},
+    {MESH_CONTROLLER_STATUS,                "MESH_CONTROLLER_STATUS",               "mesh_controller_status"},
     {MESH_WIFI_EXTENDER_MODE,               "MESH_WIFI_EXTENDER_MODE",              "onewifi_XLE_Extender_mode"},
     {MESH_ADD_DNSMASQ,                      "MESH_ADD_DNSMASQ",                     "dhcp_conf_change"},
     {MESH_XLE_MODE_CLOUD_CTRL_RFC,          "MESH_XLE_MODE_CLOUD_CTRL_RFC",         "xle_mode_cloud_ctrl_rfc"}
@@ -950,7 +951,9 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     case MESH_SYNC_STATUS:
     {
         MeshInfo(("Received MESH_SYNC_STATUS sync message.\n"));
-        handle_led_status(rxMsg.data.syncStatus.status);
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
+        handle_led_status(rxMsg.data.syncStatus.status, device_mode);
+#endif
     }
     break;
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
@@ -3343,6 +3346,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
         if(new_device_mode != device_mode)
         {
+            handle_led_status(MESH_CONTROLLER_CONNECTING, new_device_mode);
             device_mode = new_device_mode;
             //restart mesh in a new thread with mutex to avoid mesh getting disabled
 	    if(gMeshRestart == false) {
@@ -3477,15 +3481,23 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
             if (conn_status == true)
             {
                 MeshInfo("%s:Station Connected to ifname:%s Bssid:%s\n",__FUNCTION__,sta.sta_ifname, sta.bssid);
-                handle_led_status(MESH_STA_CONNECTED);
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
+                if(device_mode == EXTENDER_MODE)
+                    handle_led_status(MESH_STA_CONNECTED, device_mode);
+#endif
                 changeStaState(true);
                 Mesh_sendStaInterface(sta.sta_ifname,sta.bssid,true);
             }
             else
             {
                 MeshInfo("%s:Station Disconnected from  ifname:%s Bssid:%s\n",__FUNCTION__,sta.sta_ifname, sta.bssid);
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
                 if (!is_eth_connected())
-                    handle_led_status(MESH_STA_DISCONNECTED);
+                {
+                    if(device_mode == EXTENDER_MODE)
+                        handle_led_status(MESH_STA_DISCONNECTED, device_mode);
+                }
+#endif
                 if (sta.state)
                 {
                     Mesh_sendStaInterface(sta.sta_ifname,sta.bssid, false);
