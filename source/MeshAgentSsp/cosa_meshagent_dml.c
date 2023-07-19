@@ -182,6 +182,13 @@ MeshAgent_GetParamBoolValue
         return TRUE; 
     }
 
+    if (strcmp(ParamName, "XleModeCloudCtrlEnable") == 0)
+    {
+        MeshInfo("Gateway mode cloud enable flag get\n");
+        *pBool = g_pMeshAgent->XleModeCloudCtrlEnable;
+        return TRUE;
+    }
+
     if (strcmp(ParamName, "Opensync") == 0)
     {
 	MeshInfo("Opensync Enable get\n");
@@ -662,6 +669,17 @@ MeshAgent_SetParamBoolValue
         Mesh_SetMeshEthBhaul(bValue,false,true);
         return TRUE; 
     }    
+
+    if (strcmp(ParamName, "XleModeCloudCtrlEnable") == 0)
+    {
+        MeshInfo("Gateway mode cloud enable set\n");
+#ifdef ONEWIFI
+        Mesh_SetXleModeCloudCtrlEnable(bValue,false,true);
+#else
+        MeshInfo("XleModeCloudCtrlEnable RFC not supported\n");
+#endif
+        return TRUE;
+    }
 
     if (strcmp(ParamName, "Opensync") == 0)
     {

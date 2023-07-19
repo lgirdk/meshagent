@@ -345,12 +345,14 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_WIFI_SSID_CHANGED,                "MESH_WIFI_SSID_CHANGED",               "wifi_SSIDChanged"},
     {MESH_WIFI_RADIO_OPERATING_STD,         "MESH_WIFI_RADIO_OPERATING_STD",        "wifi_RadioOperatingStd"},
     {MESH_SYNC_SM_PAUSE,                    "MESH_SYNC_SM_PAUSE",                   "mesh_sm_pause"},
-    {MESH_WIFI_OFF_CHAN_ENABLE,             "MESH_WIFI_OFF_CHAN_ENABLE",            "wifi_OffChannelScanEnable"}
+    {MESH_WIFI_OFF_CHAN_ENABLE,             "MESH_WIFI_OFF_CHAN_ENABLE",            "wifi_OffChannelScanEnable"},
+    {MESH_GATEWAY_ENABLE,                   "MESH_GATEWAY_ENABLE",                  "mesh_switch_to_gateway"}
 #ifdef ONEWIFI
     ,
     {MESH_SYNC_STATUS,                      "MESH_SYNC_STATUS",                     "mesh_led_status"},
     {MESH_WIFI_EXTENDER_MODE,               "MESH_WIFI_EXTENDER_MODE",              "onewifi_XLE_Extender_mode"},
-    {MESH_ADD_DNSMASQ,                      "MESH_ADD_DNSMASQ",                     "dhcp_conf_change"}
+    {MESH_ADD_DNSMASQ,                      "MESH_ADD_DNSMASQ",                     "dhcp_conf_change"},
+    {MESH_XLE_MODE_CLOUD_CTRL_RFC,          "MESH_XLE_MODE_CLOUD_CTRL_RFC",         "xle_mode_cloud_ctrl_rfc"}
 #endif
 #ifdef WAN_FAILOVER_SUPPORTED
     ,
@@ -398,6 +400,7 @@ void Mesh_backup_network(char *ifname, eMeshDeviceMode type);
 int Mesh_vlan_network(char *ifname);
 int Mesh_rebootDevice();
 void  Mesh_sendCurrentSta();
+void Mesh_setXleModeChangeRbus(bool enable);
 void Mesh_sendStaInterface(char * mesh_sta,char *bssid, bool status);
 int get_sta_active_interface_name();
 #endif
@@ -917,6 +920,13 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     {
         MeshInfo(("Received MESH_GET_STAINFO sync message.\n"));
         Mesh_sendCurrentSta();
+    }
+    break;
+    case MESH_GATEWAY_ENABLE:
+    {
+        MeshInfo("Received MESH_GATEWAY_ENABLE sync message, rfc : %d.\n",g_pMeshAgent->XleModeCloudCtrlEnable);
+        if (g_pMeshAgent->XleModeCloudCtrlEnable)
+            Mesh_setXleModeChangeRbus((rxMsg.data.gateway.enable?true:false));
     }
     break;
     case MESH_BRHOME_IP:
@@ -2468,6 +2478,28 @@ static void meshSetEthbhaulSyscfg(bool enable)
     MeshInfo("eth bhaul enable set in the syscfg successfully\n");
 }
 
+#ifdef ONEWIFI
+static void meshSetXleModeCloudCtrlEnableSyscfg(bool enable)
+{
+    int i =0;
+
+    MeshInfo("%s Setting xle mode cloud control flag enable in syscfg to %d\n", __FUNCTION__, enable);
+    if(Mesh_SysCfgSetStr(meshSyncMsgArr[MESH_XLE_MODE_CLOUD_CTRL_RFC].sysStr, (enable?"true":"false"), true) != 0) {
+         MeshInfo("Failed to set the xle mode cloud control flag in syscfg, retrying 5 times\n");
+         for(i=0; i<5; i++) {
+         if(!Mesh_SysCfgSetStr(meshSyncMsgArr[MESH_XLE_MODE_CLOUD_CTRL_RFC].sysStr, (enable?"true":"false"), true)) {
+           MeshInfo("xlw mode cloud control flag syscfg set passed in %d attempt\n", i+1);
+           break;
+         }
+         else
+          MeshInfo("xle mode cloud control flag syscfg set retrial failed in %d attempt\n", i+1);
+      }
+   }
+   else
+    MeshInfo("xle mode cloud control flag set in the syscfg successfully\n");
+}
+#endif
+
 static bool meshSetGreAccSyscfg(bool enable)
 {
     int i = 0;
@@ -2657,6 +2689,29 @@ bool Mesh_SetMeshEthBhaul(bool enable, bool init, bool commitSyscfg)
     }
     return TRUE;
 }
+#ifdef ONEWIFI
+/**
+ * @brief Mesh Agent SetXleModeCloudCtrlEnable Set Enable/Disable
+ *
+ * This function will enable/disable the Mesh XleModeCloudCtrlEnable RFC enable/disable
+ */
+bool Mesh_SetXleModeCloudCtrlEnable(bool enable, bool init, bool commitSyscfg)
+{
+    // If the enable value is different or this is during setup - make it happen.
+    if (init || Mesh_GetEnabled(meshSyncMsgArr[MESH_XLE_MODE_CLOUD_CTRL_RFC].sysStr) != enable)
+    {
+        MeshInfo("%s: XleModeCloudCtrlEnable Commit:%d, Enable:%d\n",
+            __FUNCTION__, commitSyscfg, enable);
+        if(commitSyscfg) {
+            meshSetXleModeCloudCtrlEnableSyscfg(enable);
+        }
+        g_pMeshAgent->XleModeCloudCtrlEnable = enable;
+        //Send this as an RFC update to plume manager
+        Mesh_sendRFCUpdate("XleModeCloudCtrlEnable.Enable", enable ? "true" : "false", rfc_boolean);
+    }
+    return TRUE;
+}
+#endif
 #ifdef WAN_FAILOVER_SUPPORTED
 
 static void Mesh_CreatePodVlan(MeshTunnelSetVlan *conf)
@@ -3591,6 +3646,26 @@ void  Mesh_sendCurrentSta()
     MeshInfo("send currrent sta: sta_ifname:%s, bssid:%s\n",(sta.state ? sta.sta_ifname: NULL),(sta.state ? sta.bssid : NULL));
     Mesh_sendStaInterface(sta.state ? sta.sta_ifname: NULL , sta.state ? sta.bssid : NULL, sta.state ? true : false);
 }
+
+void Mesh_setXleModeChangeRbus(bool enable)
+{
+    int rc = -1;
+    rbusValue_t value;
+
+    rbusValue_Init(&value);
+    rbusValue_SetBoolean(value, enable);
+
+    rc = rbus_set(handle, MESH_GATEWAY_NOT_ACTIVE, value, NULL);
+    if(rc == RBUS_ERROR_SUCCESS)
+    {
+        MeshInfo(("Successfully Published MESH_GATEWAY_ENABLE\n"));
+    }
+    else
+    {
+        MeshInfo(("Error in publishing MESH_GATEWAY_ENABLE\n"));
+    }
+}
+
 int get_sta_active_interface_name()
 {
     int rc = RBUS_ERROR_SUCCESS;
@@ -4372,6 +4447,39 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
            }
         }
     }
+#ifdef ONEWIFI
+    out_val[0]='\0';
+    if(Mesh_SysCfgGetStr(meshSyncMsgArr[MESH_XLE_MODE_CLOUD_CTRL_RFC].sysStr, out_val, sizeof(out_val)) != 0)
+    {
+        MeshInfo("Syscfg error, Setting Xle Mode Cloud Ctrl Enable mode to default FALSE\n");
+        Mesh_SetXleModeCloudCtrlEnable(false,true,true);
+    }
+    else
+    {
+        rc = strcmp_s("true",strlen("true"),out_val,&ind);
+        ERR_CHK(rc);
+        if((ind ==0 ) && (rc == EOK))
+        {
+           MeshInfo("Setting initial Xle Mode Cloud Ctrl Enable mode to true\n");
+           Mesh_SetXleModeCloudCtrlEnable(true,true,false);
+        }
+        else
+        {
+           rc = strcmp_s("false",strlen("false"),out_val,&ind);
+           ERR_CHK(rc);
+           if((ind ==0 ) && (rc == EOK))
+           {
+               MeshInfo("Setting initial Xle Mode Cloud Ctrl Enable mode to false\n");
+               Mesh_SetXleModeCloudCtrlEnable(false,true,false);
+           }
+           else
+           {
+               MeshInfo("Xle Mode CloudCtrl Enable status error from syscfg , setting default FALSE\n");
+               Mesh_SetXleModeCloudCtrlEnable(false,true,true);
+           }
+        }
+    }
+#endif
     out_val[0]='\0';
 
     if(Mesh_SysCfgGetStr("opensync", out_val, sizeof(out_val)) != 0)

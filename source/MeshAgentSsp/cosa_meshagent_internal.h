@@ -31,6 +31,7 @@ _COSA_DATAMODEL_MESHAGENT
 {
     BOOL                        meshEnable;
     BOOL                        PodEthernetBackhaulEnable;
+    BOOL                        XleModeCloudCtrlEnable;
     BOOL                        OvsEnable;
     BOOL                        GreAccEnable;
     BOOL                        OpensyncEnable;

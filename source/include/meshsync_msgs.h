@@ -112,10 +112,12 @@ typedef enum {
     MESH_WIFI_RADIO_OPERATING_STD,
     MESH_SYNC_SM_PAUSE,
     MESH_WIFI_OFF_CHAN_ENABLE,
+    MESH_GATEWAY_ENABLE,
 #if defined(ONEWIFI)
     MESH_SYNC_STATUS,
     MESH_WIFI_EXTENDER_MODE,
     MESH_ADD_DNSMASQ,
+    MESH_XLE_MODE_CLOUD_CTRL_RFC,
 #endif
 #ifdef WAN_FAILOVER_SUPPORTED
     MESH_BACKUP_NETWORK,
@@ -348,6 +350,13 @@ typedef struct _MeshWifiStatus {
     eMeshWifiStatusType status; // Status of mesh network
 } MeshWifiStatus;
 
+/**
+ * Mesh Gateway mode set by cloud
+ */
+typedef struct _MeshGatewayEnable {
+    uint8_t enable;
+}MeshGatewayEnable;
+
 #ifdef WAN_FAILOVER_SUPPORTED
 /**
  * Mesh Network Type message
@@ -535,6 +544,7 @@ typedef struct _MeshSync {
         MeshTunnelSetVlan		tunnelSetVlan;
         MeshReducedRetry                retryFlag;
         MeshSyncSMPause                 speedtestCfg;
+        MeshGatewayEnable               gateway;
 #ifdef WAN_FAILOVER_SUPPORTED
         MeshNetworkType                 networkType;
         MeshWFOEnabledStatus            meshWFOEnabled;

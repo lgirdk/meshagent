@@ -85,6 +85,7 @@ eMeshStateType Mesh_GetMeshState();
 void Mesh_SendEthernetMac(char *mac);
 bool Mesh_SetOVS(bool enable, bool init, bool commitSyscfg);
 bool Mesh_SetMeshEthBhaul(bool enable, bool init, bool commitSyscfg);
+bool Mesh_SetXleModeCloudCtrlEnable(bool enable, bool init, bool commitSyscfg);
 void Mesh_SetCacheStatus(bool enable, bool init, bool commitSyscfg);
 bool Mesh_SetMeshRetryOptimized(bool enable, bool init, bool commitSyscfg);
 void Mesh_SendEthernetMac(char *mac);
