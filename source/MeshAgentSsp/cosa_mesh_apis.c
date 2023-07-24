@@ -4622,16 +4622,25 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
             Mesh_SetEnabled(true, true, false);
         }
         else {
-            rc = strcmp_s("false",strlen("false"),out_val,&ind);
-            ERR_CHK(rc);
-            if((ind == 0) && (rc == EOK)){
-                MeshInfo("Setting initial mesh wifi default to disabled\n");
-               Mesh_SetEnabled(false, true, false);
+#if !defined(_PUMA6_ATOM_)
+            if (Mesh_SysCfgGetInt("son_admin_status") == 1 && Mesh_SysCfgGetInt("son_operational_status") == 1 && !is_bridge_mode_enabled())
+            {
+                Mesh_SetEnabled(true, true, true);
             }
-            else {
-            MeshInfo("Unexpected value from syscfg , doing recovery\n");
-            Mesh_Recovery();
-           }
+            else
+#endif
+            {
+                rc = strcmp_s("false",strlen("false"),out_val,&ind);
+                ERR_CHK(rc);
+                if((ind == 0) && (rc == EOK)){
+                   MeshInfo("Setting initial mesh wifi default to disabled\n");
+                   Mesh_SetEnabled(false, true, false);
+                }
+                else {
+                   MeshInfo("Unexpected value from syscfg , doing recovery\n");
+                   Mesh_Recovery();
+                }
+            }
        }
     }
 
@@ -4795,8 +4804,18 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
     out_val[0]='\0';
     if(Mesh_SysCfgGetStr("mesh_ovs_enable", out_val, sizeof(out_val)) != 0)
     {
-        MeshInfo("Syscfg error, Setting OVS mode to default\n");
-        Mesh_SetOVS(false,true,true);
+#if !defined(_PUMA6_ATOM_)
+       if (Mesh_SysCfgGetInt("son_admin_status") == 1 && Mesh_SysCfgGetInt("son_operational_status") == 1 && !is_bridge_mode_enabled())
+       {
+            MeshInfo("Setting initial OVS mode to true\n");
+            Mesh_SetOVS(true,true,true);
+       }
+       else
+#endif
+       {
+            MeshInfo("Syscfg error, Setting OVS mode to default\n");
+            Mesh_SetOVS(false,true,true);
+       }
     }
     else
     {
@@ -4809,17 +4828,27 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
         }
         else
         {
-           rc = strcmp_s("false",strlen("false"),out_val,&ind);
-           ERR_CHK(rc);
-           if((ind == 0) && (rc == EOK))
+#if !defined(_PUMA6_ATOM_)
+           if (Mesh_SysCfgGetInt("son_admin_status") == 1 && Mesh_SysCfgGetInt("son_operational_status") == 1 && !is_bridge_mode_enabled())
            {
-              MeshInfo("Setting initial OVS mode to false\n");
-              Mesh_SetOVS(false,true,false);
+              MeshInfo("Setting initial OVS mode to true\n");
+              Mesh_SetOVS(true,true,true);
            }
            else
+#endif
            {
-              MeshInfo("OVS status error from syscfg , setting default\n");
-              Mesh_SetOVS(false,true,true);
+              rc = strcmp_s("false",strlen("false"),out_val,&ind);
+              ERR_CHK(rc);
+              if((ind == 0) && (rc == EOK))
+              {
+                 MeshInfo("Setting initial OVS mode to false\n");
+                 Mesh_SetOVS(false,true,false);
+              }
+              else
+              {
+                 MeshInfo("OVS status error from syscfg , setting default\n");
+                 Mesh_SetOVS(false,true,true);
+              }
            }
         }
     }
