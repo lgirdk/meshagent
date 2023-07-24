@@ -21,6 +21,27 @@ char* getFormattedTime(void) {
     return _retval;
 }
 
+int generate_random() {
+   int rand_num = 0;
+   FILE *fp = fopen("/dev/random", "rb");
+   size_t result;
+
+   if (fp == NULL) {
+       LOGERROR("Error opening /dev/random");
+       return 0;
+   }
+
+   result = fread(&rand_num, sizeof(rand_num), 1, fp);
+   fclose(fp);
+
+   if (result !=1) {
+       LOGERROR("Error reading /dev/random");
+       return 0;
+   }
+
+   return abs(rand_num);
+}
+
 #define MAX_BUFFER_SIZE 32768 // 32kB max buffer required to accommodate some large outputs like OVSDB tables
 #define BUF_SIZE 128
 #define BUF_IF_NAME 16
@@ -240,7 +261,7 @@ static bool cmd_ping_root_serv(char* iface) {
 
     LOGINFO("Checking internet connectivity over %s interface\n", iface ? iface : "default");
     while (trials--) {
-        r = rand() % cnt_serv;
+        r = generate_random() % cnt_serv;
         if (cmd_ping(g_root_servers[r], iface, NULL)) {
             return true;
         }
@@ -1223,7 +1244,6 @@ void xmesh_diag_start(int interval, bool dumps_enabled, bool wfo, int delay) {
     diag_args.delay = delay;
     diag_args.model = check_model();
 
-    srand(time(0));
     if (g_xmesh_active) {
         LOGINFO("Diagnostics session already in progress, close existing session before starting new\n");
         return;
