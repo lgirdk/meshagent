@@ -43,6 +43,8 @@
 #define      ETHBACKHAUL1_VLAN        "g-eth1.123"
 #define      GATEWAY_MODE             0
 #define      EXTENDER_MODE            1
+#define      TARGET_EXTENDER_TYPE (1 << 1)
+#define      TARGET_GW_TYPE       (1 << 0)
 
 #ifndef RDK_LED_MANAGER_EXIST
 typedef enum {
@@ -75,7 +77,6 @@ typedef struct _MeshStaStatus_node
    char sta_ifname[MAX_IFNAME_LEN];
    char bssid[MAX_BSS_ID_STR];
    bool state;
-   struct _MeshStaStatus_node  *next;
 }MeshStaStatus_node;
 
 #endif

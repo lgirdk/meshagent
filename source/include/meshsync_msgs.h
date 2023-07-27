@@ -232,6 +232,7 @@ typedef struct _MeshWifiXLEExtenderMode {
     char    bssid[MAX_BSS_ID_STR];
     uint8_t status;
     uint8_t isStatusSet;
+    int device_mode;
 } MeshWifiXLEExtenderMode;
 
 /**

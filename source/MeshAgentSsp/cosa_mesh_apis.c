@@ -140,13 +140,11 @@ const char meshServiceName[] = "meshwifi";
 const char meshDevFile[] = "/nvram/mesh-dev.flag";
 static bool gmssClamped = false;
 pthread_mutex_t mesh_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mesh_service_handler_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define _DEBUG 1
 #define THREAD_NAME_LEN 16 //length is restricted to 16 characters, including the terminating null byte
 
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED) || defined(GATEWAY_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 extern char g_Subsystem[32];
-static bool gMeshRestart = false;
 
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 #define      RBUS_DEVICE_MODE        "Device.X_RDKCENTRAL-COM_DeviceControl.DeviceNetworkingMode"
@@ -3184,6 +3182,46 @@ bool subscribeSpeedTestStatus()
     }
    return ret;
 }
+int mesh_waitRestart()
+{
+    int err = -1;
+#ifdef RDKB_EXTENDER_ENABLED
+    int fd,wd;
+    struct timeval tv;
+    fd_set fds;
+
+    tv.tv_sec = 120;
+    tv.tv_usec = 0;
+
+    fd = inotify_init();
+    if (fd == -1) {
+        MeshInfo("Restart Mesh failed during inotify_init\n");
+	return err;
+    }
+    wd = inotify_add_watch(fd, "/tmp/mesh_agent_stop_check", IN_DELETE_SELF);
+    FD_ZERO(&fds);
+    FD_SET(fd, &fds);
+    if((wd == -1) || (select(fd + 1, &fds, NULL, NULL, &tv)!= -1) ) {
+	//wd = -1 is file not present so restart mesh instantly
+	//or wait for 120 or wait till the file is deleted
+#endif
+        MeshInfo("Restart Mesh start\n");
+        if ((err = svcagt_set_service_restart (meshServiceName)) != 0)
+        {
+            MeshInfo("Restart Mesh failed\n");
+        }
+#ifdef RDKB_EXTENDER_ENABLED
+	if(!access("/tmp/mesh_handler_stop_check", F_OK )) {
+            remove("/tmp/mesh_handler_stop_check");
+            MeshInfo("Restart Mesh file is present even after 120 secsonds deleting it..\n");
+        }
+         MeshInfo("Restart Mesh end\n");
+    }
+    inotify_rm_watch(fd, wd);
+    close(fd);
+#endif
+    return err;
+}
 
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
 int getRbusStaIfName(unsigned int index)
@@ -3283,48 +3321,6 @@ int getRbusStaBssId(unsigned int index)
     return ret;
 }
 
-void *Mode_change_mesh_restart()
-{
-    //restart mesh
-    int fd,wd;
-    struct timeval tv;
-    fd_set fds;
-
-    tv.tv_sec = 120;
-    tv.tv_usec = 0;
-    pthread_detach(pthread_self());
-
-    gMeshRestart = true;
-    fd = inotify_init();
-    if (fd == -1) {
-        gMeshRestart = false;
-        MeshInfo("Restart Mesh failed during inotify_init\n");
-	return NULL;
-    }
-    wd = inotify_add_watch(fd, "/tmp/mesh_agent_stop_check", IN_DELETE_SELF);
-    FD_ZERO(&fds);
-    FD_SET(fd, &fds);
-    if((wd == -1) || (select(fd + 1, &fds, NULL, NULL, &tv)!= -1) ) {
-	//wd = -1 is file not present so restart mesh instantly
-	//or wait for 120 or wait till the file is deleted
-        pthread_mutex_lock(&mesh_service_handler_mutex);
-        MeshInfo("Restart Mesh \n");
-        if (svcagt_set_service_restart (meshServiceName) != 0)
-            MeshInfo("Restart Mesh failed\n");
-        pthread_mutex_unlock(&mesh_service_handler_mutex);
-	if(!access("/tmp/mesh_handler_stop_check", F_OK )) {
-            remove("/tmp/mesh_handler_stop_check");
-            MeshInfo("Restart Mesh file is present even after 120 secsonds deleting it..\n");
-        }
-    }
-    inotify_rm_watch(fd, wd);
-    close(fd);
-
-    gMeshRestart = false;
-    return NULL;
-
-}
-
 void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEventSubscription_t* subscription)
 {
     (void)handle;
@@ -3343,8 +3339,6 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     int new_device_mode;
-    pthread_t tid;
-    char thread_name[THREAD_NAME_LEN] = { 0 };
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
     bool is_connect_timeout;
@@ -3386,21 +3380,8 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         {
             handle_led_status(MESH_CONTROLLER_CONNECTING, new_device_mode);
             device_mode = new_device_mode;
-            //restart mesh in a new thread with mutex to avoid mesh getting disabled
-	    if(gMeshRestart == false) {
-                if(pthread_create(&tid, NULL, Mode_change_mesh_restart, NULL) != 0)
-                    MeshInfo("Restart Mesh thread creation failed");
-	        else {
-                    strcpy_s(thread_name, sizeof(thread_name), "DevModeRestart");
-                    if (pthread_setname_np(tid, thread_name) == 0)
-                        MeshInfo("Mesh_sysevent_handler thread name %s set successfully\n", thread_name);
-                    else
-                        MeshError("%s error occurred while setting Mesh_sysevent_handler thread name\n", strerror(errno));
-	        }
-	    }
-	    else
-                MeshInfo("thread is already running ");
-
+            MeshInfo("Device Mode changed, Sending the notification to managers\n");
+            Mesh_sendCurrentSta();
         }
     }
      else
@@ -3451,7 +3432,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         is_gateway_present = rbusValue_GetBoolean(value);
         gateway_present = is_gateway_present?1:0;
         MeshInfo("ExternalGatewayPresent  = %d\n",gateway_present);
-	if(gateway_present == AP_ACTIVE)
+        if(gateway_present == AP_ACTIVE)
 	{
             handle_uplink_bridge(NULL, NULL, NULL, false);
             udhcpc_stop(sta.sta_ifname);
@@ -3538,8 +3519,8 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
 #endif
                 if (sta.state)
                 {
-                    Mesh_sendStaInterface(sta.sta_ifname,sta.bssid, false);
                     changeStaState(false);
+                    Mesh_sendStaInterface(sta.sta_ifname,sta.bssid, false);
                 }
             }
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
@@ -4133,9 +4114,8 @@ void* handleMeshEnable(void *Args)
             // Check if the is_meshenable_waiting is true, before starting the mesh services
             if ((!is_meshenable_waiting) && (err = svcagt_get_service_state(meshServiceName)) == 0)
             {
-                pthread_mutex_lock(&mesh_service_handler_mutex);
                 // returns "0" on success
-                if ((err = svcagt_set_service_state(meshServiceName, true)) != 0)
+                if ((err = mesh_waitRestart()) != 0)
                 {
                     MeshError("meshwifi service failed to run, igonoring the mesh enablement\n");
 		    t2_event_d("WIFI_ERROR_meshwifiservice_failure", 1);
@@ -4143,23 +4123,20 @@ void* handleMeshEnable(void *Args)
                     meshSetSyscfg(0, true);
                     success = FALSE;
                 }
-                pthread_mutex_unlock(&mesh_service_handler_mutex);
             }
          } else {
             // This will only work if this service is started *AFTER* CcspWifi
             // If the service is running, stop it
-            pthread_mutex_lock(&mesh_service_handler_mutex);
             if ((err = svcagt_get_service_state(meshServiceName)) == 1)
             {
                 // returns "0" on success
-                if ((err = svcagt_set_service_state(meshServiceName, false)) != 0)
+                if ((err = mesh_waitRestart()) != 0)
                 {
                     meshSetSyscfg(0, true);
                     error = MB_ERROR_MESH_SERVICE_STOP_FAIL;
                     success = FALSE;
                 }
             }
-            pthread_mutex_unlock(&mesh_service_handler_mutex);
         }
 
         if (success) {
@@ -4885,6 +4862,10 @@ void Mesh_sendStaInterface(char * mesh_sta, char *bssid,  bool status)
     mMsg.msgType = MESH_WIFI_EXTENDER_MODE;
     mMsg.data.onewifiXLEExtenderMode.status  = status ?  1 : 0;
     mMsg.data.onewifiXLEExtenderMode.isStatusSet = 1;
+    mMsg.data.onewifiXLEExtenderMode.device_mode = 0;
+#if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
+    mMsg.data.onewifiXLEExtenderMode.device_mode |= (device_mode == GATEWAY_MODE)? TARGET_GW_TYPE:TARGET_EXTENDER_TYPE;
+#endif
     if (bssid)
     {
         rc = strcpy_s(mMsg.data.onewifiXLEExtenderMode.bssid,
