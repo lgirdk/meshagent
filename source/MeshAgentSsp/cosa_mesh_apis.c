@@ -2058,7 +2058,7 @@ static BOOL is_reset_needed(void)
     parameterValStruct_t    **valStructs = NULL;
     char *dstComponent = "eRT.com.cisco.spvtg.ccsp.wifi";
     char *dstPath = "/com/cisco/spvtg/ccsp/wifi";
-    char *paramNames[]={"Device.WiFi.SSID.13.Enable", "Device.WiFi.SSID.14.Enable"};
+    char *paramNames[]={"Device.WiFi.SSID.3.Enable", "Device.WiFi.SSID.4.Enable"};
     int  valNum = 0;
     BOOL ret_b=FALSE;
     errno_t rc[2] = {-1, -1};
@@ -2106,10 +2106,15 @@ static BOOL is_reset_needed(void)
 static void set_mesh_APs(bool enable)
 {
  MeshInfo("%s Performing a mesh AP = %s\n",__FUNCTION__,(enable?"true":"false"));
- if(set_wifi_boolean_enable("Device.WiFi.SSID.13.Enable",(enable?"true":"false")))
-  MeshInfo("Device.WiFi.SSID.13.Enable succesfully set to %s\n",(enable?"true":"false"));
- if(set_wifi_boolean_enable("Device.WiFi.SSID.14.Enable",(enable?"true":"false")))
-  MeshInfo("Device.WiFi.SSID.14.Enable succesfully set to %s\n",(enable?"true":"false"));
+ if(set_wifi_boolean_enable("Device.WiFi.SSID.3.Enable",(enable?"true":"false")))
+  MeshInfo("Device.WiFi.SSID.3.Enable succesfully set to %s\n",(enable?"true":"false"));
+ if(set_wifi_boolean_enable("Device.WiFi.SSID.4.Enable",(enable?"true":"false")))
+  MeshInfo("Device.WiFi.SSID.4.Enable succesfully set to %s\n",(enable?"true":"false"));
+ //Add Apply Setting.
+#ifndef _PUMA6_ATOM_
+ if(set_wifi_boolean_enable("Device.WiFi.Radio.1.X_CISCO_COM_ApplySetting","true") && set_wifi_boolean_enable("Device.WiFi.Radio.2.X_CISCO_COM_ApplySetting","true"))
+	 MeshInfo("Device.WiFi.Radio.1.X_CISCO_COM_ApplySetting successful\n");
+#endif
 }
 
 static BOOL is_SSID_enabled(void)
@@ -2118,7 +2123,7 @@ static BOOL is_SSID_enabled(void)
     parameterValStruct_t    **valStructs = NULL;
     char *dstComponent = "eRT.com.cisco.spvtg.ccsp.wifi";
     char *dstPath = "/com/cisco/spvtg/ccsp/wifi";
-    char *paramNames[]={"Device.WiFi.SSID.13.Status" , "Device.WiFi.SSID.14.Status"};
+    char *paramNames[]={"Device.WiFi.SSID.3.Status" , "Device.WiFi.SSID.4.Status"};
     int  valNum = 0;
     BOOL ret_b=FALSE;
     errno_t rc = -1;
@@ -4204,7 +4209,10 @@ void* handleMeshEnable(void *Args)
                         return NULL;
                    }
             }
-
+#ifndef _PUMA6_ATOM_
+	        //dont check mesh interfaces are disabled, just force disable for MV3 and MV2+, let opensync enable back.
+            set_mesh_APs(false);
+#else
             MeshInfo("Checking if Mesh APs are enabled or disabled\n");
             if(is_SSID_enabled())
                 MeshInfo("Mesh interfaces are up\n");
@@ -4213,6 +4221,7 @@ void* handleMeshEnable(void *Args)
                 MeshInfo("Turning Mesh SSID enable\n");
                 set_mesh_APs(true);
             }
+#endif
             // Check if the is_meshenable_waiting is true, before starting the mesh services
             if ((!is_meshenable_waiting) && (err = svcagt_get_service_state(meshServiceName)) == 0)
             {
