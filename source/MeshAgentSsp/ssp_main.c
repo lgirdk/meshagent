@@ -121,7 +121,6 @@ int  cmd_dispatch(int  command)
 int msgBusInit(const char *pComponentName)
 {
     BOOL                            bRunAsDaemon       = TRUE;
-    int                             cmdChar            = 0;
 	
     extern ANSC_HANDLE bus_handle;
     char *subSys            = NULL;  
@@ -174,21 +173,10 @@ int msgBusInit(const char *pComponentName)
     MeshInfo("msgBusInit - /tmp/meshagent_initialized created\n");
     pthread_t tid;
     pthread_create(&tid, NULL, Cosa_print_uptime_meshagent, NULL);
-
     if ( bRunAsDaemon )
     {
         return 1; //Failure
     }
-    else
-    {
-        while ( cmdChar != 'q' )
-        {
-            cmdChar = getchar();
-
-            cmd_dispatch(cmdChar);
-        }
-    }
-
     err = Cdm_Term();
     if (err != CCSP_SUCCESS)
     {
@@ -275,15 +263,21 @@ int CheckAndGetDevicePropertiesEntry( char *pOutput, int size, char *sDeviceProp
 
             // grab content from string(entry)
             urlPtr = strstr( buf, "=" );
+            if (urlPtr == NULL)
+            {
+                fclose(fp1);
+                return -1;
+            }
             urlPtr++;
 
             rc = strncpy_s(pOutput, size, urlPtr,size);
             if(rc != EOK)
             {
                 ERR_CHK(rc);
+                fclose( fp1 );
                 return -1;
             }
-	    
+
 	    ret=0;
             break;
         }

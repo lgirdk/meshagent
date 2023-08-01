@@ -676,8 +676,10 @@ static int Mesh_getIpOctet(char *Ip, int octet)
 {
     char *token = NULL, *rlocalIp = NULL;
     char localIp [MAX_IP_LEN] = {'\0'};
+    errno_t rc = -1;
 
-    strcpy(localIp, Ip);
+    rc = strcpy_s(localIp, sizeof(localIp), Ip);
+    ERR_CHK(rc);
     rlocalIp = localIp;
     while ((--octet >= 0) && (token = strtok_r(rlocalIp, ".", &rlocalIp)));
     return (token ? atoi(token) : -1);
@@ -1255,6 +1257,7 @@ static void* leaseServer(void *data)
    if( bind(Socket, (struct sockaddr *) &serverAddr, sizeof(serverAddr)) != 0)
    {
        MeshError("%s-%d : Error in Binding Socket\n" , __FUNCTION__, __LINE__);
+       close(Socket);
        return NULL;
    }
 
@@ -1399,6 +1402,7 @@ static void* msgQServer(void *data)
       {
           ERR_CHK(rc);
           MeshError("Error in copying meshSocketPath\n");
+          close(master_socket);
           return NULL;
       }
     } else {
@@ -1407,6 +1411,7 @@ static void* msgQServer(void *data)
       {
           ERR_CHK(rc);
           MeshError("Error in copying meshSocketPath to address.sun_path\n");
+          close(master_socket);
           return NULL;
       }
       unlink(meshSocketPath);
@@ -2766,6 +2771,7 @@ static void Mesh_ext_create_lanVlans( char *ifname)
 {
    char vlan_ifname[MAX_IFNAME_LEN] = {0};
    MeshTunnelSetVlan data;
+   errno_t rc = -1;
 
    int i=0;
    int lan_vlans[] = {PRIV_VLAN,XHS_VLAN,LNF_VLAN};
@@ -2783,8 +2789,10 @@ static void Mesh_ext_create_lanVlans( char *ifname)
        snprintf(vlan_ifname, sizeof(vlan_ifname),
                      "%s.%d", ifname, lan_vlans[i]);
        strncpy(data.ifname,  vlan_ifname,sizeof(data.ifname));
-       strncpy(data.parent_ifname, ifname,sizeof(data.parent_ifname));
-       strncpy(data.bridge, lan_bridges[i],sizeof(data.bridge));
+       rc = strcpy_s(data.parent_ifname, sizeof(data.parent_ifname), ifname);
+       ERR_CHK(rc);
+       rc = strcpy_s(data.bridge, sizeof(data.bridge), lan_bridges[i]);
+       ERR_CHK(rc);
        data.vlan = lan_vlans[i];
        MeshInfo("Mesh_ext_create_lanVlans lan vlan: %s, bridge: %s\n", data.ifname, data.bridge);
        Mesh_ModifyPodTunnelVlan(&data, false);
@@ -2804,6 +2812,7 @@ bool Mesh_ExtenderBridge(char *ifname)
     bool bIsethpod = true;
     char vlan_ifname[MAX_IFNAME_LEN] = {0};
     int rc = -1;
+    errno_t rv = -1;
 
     memset(&data, 0, sizeof(MeshTunnelSetVlan));
 
@@ -2826,22 +2835,27 @@ bool Mesh_ExtenderBridge(char *ifname)
             char * ethportname = NULL;
             char *context = NULL;
 
-            strncpy(ifname_name,ifname,MAX_IFNAME_LEN);
+            rv = strcpy_s(ifname_name, MAX_IFNAME_LEN, ifname);
+            ERR_CHK(rv);
             strtok_r(ifname_name, "-", &context);
             ethportname = strtok_r(NULL, ".", &context);
             MeshInfo("Ethernet port is %s \n",ethportname);
             snprintf(vlan_ifname, sizeof(vlan_ifname),
                      "%s.%d", ethportname, MESH_EXTENDER_VLAN);
-            strncpy(data.parent_ifname, ethportname,sizeof(data.parent_ifname));
+            rv = strcpy_s(data.parent_ifname, sizeof(data.parent_ifname), ethportname);
+            ERR_CHK(rv);
         }
         else
         {
            snprintf(vlan_ifname, sizeof(vlan_ifname),
                      "%s.%d", ifname, MESH_EXTENDER_VLAN);
-           strncpy(data.parent_ifname, ifname,sizeof(data.parent_ifname));
+           rv = strcpy_s(data.parent_ifname, sizeof(data.parent_ifname), ifname);
+           ERR_CHK(rv);
         }
-        strncpy(data.bridge, meshWANIfname,sizeof(data.bridge));
-        strncpy(data.ifname,  vlan_ifname,sizeof(data.ifname));
+        rv = strcpy_s(data.bridge,sizeof(data.bridge), meshWANIfname);
+        ERR_CHK(rv);
+        rv = strcpy_s(data.ifname, sizeof(data.ifname), vlan_ifname );
+        ERR_CHK(rv);
         data.vlan = MESH_EXTENDER_VLAN;
         Mesh_ModifyPodTunnelVlan(&data,false);
     } else {
@@ -3212,8 +3226,12 @@ int mesh_waitRestart()
         }
 #ifdef RDKB_EXTENDER_ENABLED
 	if(!access("/tmp/mesh_handler_stop_check", F_OK )) {
-            remove("/tmp/mesh_handler_stop_check");
-            MeshInfo("Restart Mesh file is present even after 120 secsonds deleting it..\n");
+            if(remove("/tmp/mesh_handler_stop_check") == 0) {
+                MeshInfo("File /tmp/mesh_handler_stop_check deleted successfully.\n");
+            }
+            else {
+                MeshInfo("Error deleting file /tmp/mesh_handler_stop_check.\n");
+            }
         }
          MeshInfo("Restart Mesh end\n");
     }
@@ -4433,8 +4451,9 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
          	t2_event_d("SYS_ERROR_SYSCFG_Open_failed", 1);
                 Mesh_Recovery();
              }
-        v_secure_pclose(cmd);
-        }
+             else
+                v_secure_pclose(cmd);
+         }
         else
         {
            fgets(mesh_enable, sizeof(mesh_enable), cmd);

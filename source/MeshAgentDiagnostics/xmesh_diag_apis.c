@@ -5,6 +5,7 @@
 #include <time.h>
 #include <arpa/inet.h>
 #include "xmesh_diag.h"
+#include  "safec_lib_common.h"
 
 char* getFormattedTime(void) {
 
@@ -49,6 +50,7 @@ int generate_random() {
 #define BUF_MAC  18 // xx:xx:xx:xx:xx:xx
 
 typedef enum {
+    MODEL_UNKNOWN = -1,
     MODEL_CGM4331COM,
     MODEL_TG4482PC2,
     MODEL_SIMULATED,
@@ -141,25 +143,31 @@ static char *g_root_servers_ipv4[] = {
 static device_model_t check_model() {
     FILE *fp;
     char line[128];
+    device_model_t model=MODEL_UNKNOWN;
 
     if ((fp = fopen("/version.txt", "rb")) == NULL)
-        return -1;
+        return MODEL_UNKNOWN;
 
     while (fgets(line, sizeof(line), fp) != NULL) {
         if (strstr(line, "imagename:")) {
             LOGINFO("Version: %s", line+10);
             if (strstr(line,"WNXL11BWL")) {
-                return MODEL_WNXL11BWL;
+                model = MODEL_WNXL11BWL;
+                break;
             } else if (strstr(line, "SIM")) {
-                return MODEL_SIMULATED;
+                model = MODEL_SIMULATED;
+                break;
             } else if (strstr(line, "CGM4331COM")) {
-                return MODEL_CGM4331COM;
+                model = MODEL_CGM4331COM;
+                break;
             } else if (strstr(line, "TG4482PC2")) {
-                return MODEL_TG4482PC2;
+                model = MODEL_TG4482PC2;
+                break;
             }
         }
     }
-    return -1;
+    fclose(fp);
+    return model;
 }
 
 /**
@@ -372,6 +380,7 @@ static bool xle_get_backhaul_sta(char* sta) {
     char buf[64];
     char *ethx;
     char temp[BUF_IF_NAME];
+    errno_t rc = -1;
 
     if (sta == NULL) {
         LOGERROR("NULL argument(s) passed to %s\n", __func__);
@@ -397,7 +406,8 @@ static bool xle_get_backhaul_sta(char* sta) {
             return true;
         }
     } else if (strstr(sta, "eth")) {
-        strncpy(temp, sta, BUF_IF_NAME);
+        rc = strcpy_s(temp, BUF_IF_NAME, sta);
+        ERR_CHK(rc);
         ethx = strtok(temp, ".");
         snprintf(cmd, sizeof(cmd), "cat /sys/class/net/%s/carrier", ethx);
         cmd_exec(cmd, buf, sizeof(buf));
@@ -420,6 +430,7 @@ static bool xle_get_backhaul_sta(char* sta) {
 static bool xle_get_backhaul_ip(char* sta, char* sta_bhaul_ip) {
     char cmd[256];
     char buf[BUF_IPV4];
+    errno_t rc = -1;
 
     if (sta_bhaul_ip == NULL || sta == NULL) {
         LOGERROR("NULL argument(s) passed to %s\n", __func__);
@@ -435,7 +446,9 @@ static bool xle_get_backhaul_ip(char* sta, char* sta_bhaul_ip) {
         return false;
     }
 
-    strncpy(sta_bhaul_ip, buf, BUF_IPV4);
+    rc = strcpy_s(sta_bhaul_ip, BUF_IPV4, buf);
+    ERR_CHK(rc);
+
     if (!validate_ipv4(sta_bhaul_ip)) {
         LOGERROR("Invalid backhaul IP received - %s\n", sta_bhaul_ip);
         return false;
@@ -568,6 +581,7 @@ static bool xle_validate_brwan(char* sta) {
     char buf[1024];
     char temp[BUF_IF_NAME];
     char port[BUF_IF_NAME+6];
+    errno_t rc = -1;
 
     if (sta == NULL) {
         LOGERROR("NULL argument(s) passed to %s\n", __func__);
@@ -588,7 +602,8 @@ static bool xle_validate_brwan(char* sta) {
     LOGSUCCESS("brWAN has valid IP %s\n", buf);
 
     if (strstr(sta, "eth")) {
-        strncpy(temp, sta, BUF_IF_NAME);
+        rc = strcpy_s(temp, BUF_IF_NAME, sta);
+        ERR_CHK(rc);
         strtok(temp, ".");
         snprintf(port, sizeof(port), "%s.200", temp);
     } else {
@@ -858,6 +873,7 @@ static int xb_find_connected_pods(char ***conn_pods_list) {
     int pods_on_iface;
     int ifnum;
     int i;
+    errno_t rc = -1;
 
     // Identify clients connected to backhaul accesspoints 13, 14
     for (ifnum=13; ifnum<=14; ifnum++) {
@@ -869,18 +885,21 @@ static int xb_find_connected_pods(char ***conn_pods_list) {
         }
         pods_on_iface = atoi(buf);
         LOGINFO("%d pods connected to Device.WiFi.AccessPoint.%d.\n", pods_on_iface, ifnum);
-        for (i=1; i<=pods_on_iface; i++) {
-            *conn_pods_list = (char**)realloc(*conn_pods_list, (total_pods+1) * sizeof(char*));
-            (*conn_pods_list)[total_pods] = (char*)malloc(BUF_MAC);
-            snprintf(cmd,sizeof(cmd),"dmcli eRT getv Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.MACAddress | grep value: | rev | cut -d' ' -f2 | rev", ifnum, i);
-            cmd_exec(cmd,buf,sizeof(buf));
-            if (!strlen(buf)) {
-                LOGERROR("Cannot fetch Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.MACAddress\n", ifnum, i);
-                continue;
-            } else {
-                strncpy((*conn_pods_list)[total_pods], buf, BUF_MAC);
-                LOGINFO("Pod %s is connected on accesspoint %d\n", (*conn_pods_list)[total_pods], ifnum);
-                total_pods++;
+        if (pods_on_iface > 0) {
+            for (i=1; i<=pods_on_iface; i++) {
+                *conn_pods_list = (char**)realloc(*conn_pods_list, (total_pods+1) * sizeof(char*));
+                (*conn_pods_list)[total_pods] = (char*)malloc(BUF_MAC);
+                snprintf(cmd,sizeof(cmd),"dmcli eRT getv Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.MACAddress | grep value: | rev | cut -d' ' -f2 | rev", ifnum, i);
+                cmd_exec(cmd,buf,sizeof(buf));
+                if (!strlen(buf)) {
+                    LOGERROR("Cannot fetch Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.MACAddress\n", ifnum, i);
+                    continue;
+                } else {
+                    rc = strcpy_s((*conn_pods_list)[total_pods], BUF_MAC, buf);
+                    ERR_CHK(rc);
+                    LOGINFO("Pod %s is connected on accesspoint %d\n", (*conn_pods_list)[total_pods], ifnum);
+                    total_pods++;
+                }
             }
         }
     }

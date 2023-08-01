@@ -70,6 +70,7 @@ ANSC_STATUS ssp_Mbi_MessageBusEngage(char * component_id,char * config_file,char
     if ( ! component_id || ! path )
     {
         MeshError(" !!! ssp_Mbi_MessageBusEngage: component_id or path is NULL !!!\n");
+        return -1;
     }
 
     /* Connect to message bus */
