@@ -3370,9 +3370,14 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
     {
         //Handle device mode
         new_device_mode = rbusValue_GetUInt32(value);
-        MeshInfo("New Device Mode = %d, Old Device Mode = %d",new_device_mode,device_mode);
+        MeshInfo("New Device Mode = %d, Old Device Mode = %d\n",new_device_mode,device_mode);
 	if (new_device_mode == GATEWAY_MODE)
+        {
+            if(ping_ip(MESH_BHAUL_INETADDR))
+                MeshInfo("Gateway Ip is reachable, still changing the device mode to gateway\n");
+
             snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
+        }
 	else
             snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_XLE_BRIDGE);
 

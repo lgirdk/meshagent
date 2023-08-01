@@ -121,6 +121,7 @@ int handle_uplink_bridge(char *ifname, char * bridge_ip, char *pod_addr, bool cr
 bool udhcpc_stop(char* ifname);
 bool udhcpc_start(char* ifname);
 int udhcpc_pid(char *ifname);
+bool ping_ip (char *ip);
 #ifndef RDK_LED_MANAGER_EXIST
 void  led_state(eLedColor color,eLedAnimation animation);
 #endif

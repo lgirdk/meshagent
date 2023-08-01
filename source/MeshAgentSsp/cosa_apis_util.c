@@ -66,6 +66,9 @@ LedColor_Msg  meshLedColorArr[] = {
 #define STA_DISCONNECTED              "19"
 #define UNIT_ACTIVATED_SYSCFG         "unit_activated"
 #endif
+
+#define MIN_BUFF                      128
+#define MAX_BUFF                      1024
 extern int sysevent_fd_gs;
 extern token_t sysevent_token_gs;
 
@@ -253,6 +256,38 @@ int svcagt_set_service_restart (const char *svc_name)
         return exit_code;
 }
 
+bool ping_ip (char *ip)
+{
+    char    cmd[MIN_BUFF],buf[MIN_BUFF],out[MAX_BUFF];
+    FILE    *fp;
+    size_t  total_read = 0;
+
+    snprintf(cmd, sizeof(cmd), "ping -c 1 %s",ip);
+    fp = popen(cmd, "r");
+    if (!fp) {
+        MeshError("%s - popen failed, errno = %d\n", cmd, errno);
+        return errno;
+    }
+    memset(out, 0, MAX_BUFF);
+    while (fgets(buf, MIN_BUFF, fp) != NULL) {
+        size_t len = strlen(buf);
+        if (total_read + len >= MAX_BUFF) {
+            MeshError("Exceeded buffer size, clipping output\n");
+            break;
+        }
+        strcpy(out + total_read, buf);
+        total_read += len;
+    }
+
+    while(out[strlen(out)-1] == '\r' || out[strlen(out)-1] == '\n') {
+        out[strlen(out)-1] = '\0';
+    }
+    if(pclose(fp)) {
+        return false;
+    } else {
+        return true;
+    }
+}
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
 int nif_ioctl(int cmd, void *buf)
 {
