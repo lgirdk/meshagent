@@ -394,7 +394,7 @@ static bool Mesh_Register_sysevent(ANSC_HANDLE hThisObject);
 static void *Mesh_sysevent_handler(void *data);
 static void Mesh_sendReducedRetry(bool value);
 #if defined(WAN_FAILOVER_SUPPORTED)
-void Mesh_backup_network(char *ifname, eMeshDeviceMode type);
+void Mesh_backup_network(char *ifname, eMeshDeviceMode type, bool status);
 #endif
 #ifdef ONEWIFI
 int Mesh_vlan_network(char *ifname);
@@ -911,7 +911,7 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
 #ifdef WAN_FAILOVER_SUPPORTED
     case MESH_BACKUP_NETWORK:
     {
-        Mesh_backup_network(rxMsg.data.networkType.ifname, rxMsg.data.networkType.type);
+        Mesh_backup_network(rxMsg.data.networkType.ifname, rxMsg.data.networkType.type, rxMsg.data.networkType.status);
     }
     break;
 #endif
@@ -1196,7 +1196,7 @@ static void Mesh_EthPodTunnel(PodTunnel *tunnel)
 #if defined(WAN_FAILOVER_SUPPORTED)
     char cmd[256]={0};
     snprintf(cmd, sizeof(cmd), "ethpod%d", PodIdx);
-    Mesh_backup_network(cmd, MESH_GATEWAY_DEVICE_MODE);
+    Mesh_backup_network(cmd, MESH_GATEWAY_DEVICE_MODE, true);
 #endif
 }
 /**
@@ -3369,7 +3369,6 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         {
             if(ping_ip(MESH_BHAUL_INETADDR))
                 MeshInfo("Gateway Ip is reachable, still changing the device mode to gateway\n");
-
             snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
         }
 	else
@@ -3380,6 +3379,8 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
         {
             handle_led_status(MESH_CONTROLLER_CONNECTING, new_device_mode);
             meshETHBhaulUplink = false;
+            MeshInfo("meshETHBhaulUplink: false when device_mode switch\n");
+            publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink);
             device_mode = new_device_mode;
             MeshInfo("Device Mode changed, Sending the notification to managers\n");
             Mesh_sendCurrentSta();
@@ -3600,18 +3601,29 @@ void rbus_get_gw_present()
 }
 #endif
 #if defined(WAN_FAILOVER_SUPPORTED)
-void Mesh_backup_network(char *ifname, eMeshDeviceMode type)
+void Mesh_backup_network(char *ifname, eMeshDeviceMode type, bool status)
 {
     char cmd[256]={0};
     int connect = 0;
-    static bool previous = false;
+    static bool previous = false, is_eth_up = false;
 
     MeshInfo("Received MESH_BACKUP_NETWORK for %s interface : %s \n",type ? "Gateway" : "Extender",ifname);
+    is_eth_up = (strstr(ifname,MESH_ETHPORT) != NULL);
     if(!type)
     {
-        meshETHBhaulUplink = (strstr(ifname,MESH_ETHPORT) != NULL);
-        MeshInfo("MESH_ETHERNETBHAUL_UPLINK connect:%d\n", meshETHBhaulUplink);
-        publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink);
+        if (is_eth_up && !status)
+        {
+            meshETHBhaulUplink = false;
+            MeshInfo("Eth : got disconnected: %s\n",ifname);
+            publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink);
+            return;
+        }
+        else
+        {
+            meshETHBhaulUplink = is_eth_up;
+            MeshInfo("%s : got connected: %s\n",(is_eth_up?"Eth":"Wi-Fi"),ifname);
+            publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink);
+        }
     }
 
     if (Mesh_ExtenderBridge(ifname))

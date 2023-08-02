@@ -367,6 +367,7 @@ typedef struct _MeshGatewayEnable {
 typedef struct _MeshNetworkType {
     eMeshDeviceMode type; // Status of mesh network
     char ifname [MAX_IFNAME_LEN];
+    uint8_t   status;
 } MeshNetworkType;
 
 typedef struct _MeshWFOEnabledStatus {
