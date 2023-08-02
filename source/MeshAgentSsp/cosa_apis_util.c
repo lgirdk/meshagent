@@ -167,9 +167,9 @@ int svcagt_get_service_state (const char *svc_name)
 	bool running;
 
 	MeshInfo("In svcagt_get_service_state\n");
-	exit_code = v_secure_system ("pidof /usr/bin/dm");
+	exit_code = v_secure_system ("pidof dm");
 	if (exit_code == -1) {
-		CcspTraceError(("Error invoking pidof /usr/bin/dm, errno: %s\n", strerror(errno)));
+		CcspTraceError(("Error invoking pidof dm, errno: %s\n", strerror(errno)));
 		return -1;
 	}
 	running = (exit_code == 0);
