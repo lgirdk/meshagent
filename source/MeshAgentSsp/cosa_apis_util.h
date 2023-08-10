@@ -41,6 +41,7 @@
 #define      MESH_XLE_BRIDGE          "br-home"
 #define      ETHBACKHAUL0_VLAN        "g-eth0.123"
 #define      ETHBACKHAUL1_VLAN        "g-eth1.123"
+#define      DEFAULT_MODE             -1
 #define      GATEWAY_MODE             0
 #define      EXTENDER_MODE            1
 #define      TARGET_EXTENDER_TYPE (1 << 1)

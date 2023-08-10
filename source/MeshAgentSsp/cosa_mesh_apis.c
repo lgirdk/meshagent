@@ -263,7 +263,7 @@ rbusDataElement_t meshRbusDataElements[NUM_OF_RBUS_PARAMS] = {
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
 MeshStaStatus_node sta;
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
-static int device_mode = 0;
+static int device_mode = DEFAULT_MODE;
 #endif
 unsigned char mesh_backhaul_ifname[MAX_IFNAME_LEN];
 #endif
@@ -4864,7 +4864,8 @@ void Mesh_sendStaInterface(char * mesh_sta, char *bssid,  bool status)
     mMsg.data.onewifiXLEExtenderMode.isStatusSet = 1;
     mMsg.data.onewifiXLEExtenderMode.device_mode = 0;
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
-    mMsg.data.onewifiXLEExtenderMode.device_mode |= (device_mode == GATEWAY_MODE)? TARGET_GW_TYPE:TARGET_EXTENDER_TYPE;
+    if (device_mode != DEFAULT_MODE)
+        mMsg.data.onewifiXLEExtenderMode.device_mode |= (device_mode == GATEWAY_MODE)? TARGET_GW_TYPE:TARGET_EXTENDER_TYPE;
 #endif
     if (bssid)
     {
