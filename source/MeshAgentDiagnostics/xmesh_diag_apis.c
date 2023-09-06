@@ -24,11 +24,11 @@ char* getFormattedTime(void) {
 
 int generate_random() {
    int rand_num = 0;
-   FILE *fp = fopen("/dev/random", "rb");
+   FILE *fp = fopen("/dev/urandom", "rb");
    size_t result;
 
    if (fp == NULL) {
-       LOGERROR("Error opening /dev/random");
+       LOGERROR("Error opening /dev/urandom");
        return 0;
    }
 
@@ -36,7 +36,7 @@ int generate_random() {
    fclose(fp);
 
    if (result !=1) {
-       LOGERROR("Error reading /dev/random");
+       LOGERROR("Error reading /dev/urandom");
        return 0;
    }
 
