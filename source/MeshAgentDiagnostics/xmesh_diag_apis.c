@@ -137,37 +137,103 @@ static char *g_root_servers_ipv4[] = {
     "202.12.27.33"
 };
 
+static int GetFirmwareName (char *pValue, unsigned long maxSize)
+{
+    static char name[64];
+
+    if (name[0] == 0)
+    {
+        FILE *fp;
+        char buf[128];  /* big enough to avoid reading incomplete lines */
+        char *s = NULL;
+        size_t len = 0;
+
+        if ((fp = fopen ("/version.txt", "r")) != NULL)
+        {
+            while (fgets (buf, sizeof(buf), fp) != NULL)
+            {
+                /*
+                   The imagename field may use either a ':' or '=' separator
+                   and the value may or not be quoted. Handle all 4 cases.
+                */
+                if ((memcmp (buf, "imagename", 9) == 0) && ((buf[9] == ':') || (buf[9] == '=')))
+                {
+                    s = (buf[10] == '"') ? &buf[11] : &buf[10];
+
+                    while (1)
+                    {
+                        int inch = s[len];
+
+                        if ((inch == '"') || (inch == '\n') || (inch == 0))
+                        {
+                            break;
+                        }
+
+                        len++;
+                    }
+
+                    break;
+                }
+            }
+
+            fclose (fp);
+        }
+
+        if (len >= sizeof(name))
+        {
+            len = sizeof(name) - 1;
+        }
+
+        memcpy (name, s, len);
+        name[len] = 0;
+    }
+
+    if (name[0] != 0)
+    {
+        size_t len = strlen(name);
+
+        if (len >= maxSize)
+        {
+            len = maxSize - 1;
+        }
+
+        memcpy (pValue, name, len);
+        pValue[len] = 0;
+
+        return 0;
+    }
+
+    pValue[0] = 0;
+
+    return -1;
+}
+
 /**
  * Identify Device model
  */
-static device_model_t check_model() {
-    FILE *fp;
+static device_model_t check_model(void)
+{
     char line[128];
-    device_model_t model=MODEL_UNKNOWN;
 
-    if ((fp = fopen("/version.txt", "rb")) == NULL)
-        return MODEL_UNKNOWN;
+    if (GetFirmwareName(line, sizeof(line)) == 0)
+    {
+        LOGINFO("Version: %s", line);
 
-    while (fgets(line, sizeof(line), fp) != NULL) {
-        if (strstr(line, "imagename:")) {
-            LOGINFO("Version: %s", line+10);
-            if (strstr(line,"WNXL11BWL")) {
-                model = MODEL_WNXL11BWL;
-                break;
-            } else if (strstr(line, "SIM")) {
-                model = MODEL_SIMULATED;
-                break;
-            } else if (strstr(line, "CGM4331COM")) {
-                model = MODEL_CGM4331COM;
-                break;
-            } else if (strstr(line, "TG4482PC2")) {
-                model = MODEL_TG4482PC2;
-                break;
-            }
+        if (strstr(line,"WNXL11BWL")) {
+            return MODEL_WNXL11BWL;
+        }
+        if (strstr(line, "SIM")) {
+            return MODEL_SIMULATED;
+        }
+        if (strstr(line, "CGM4331COM")) {
+            return MODEL_CGM4331COM;
+        }
+        if (strstr(line, "TG4482PC2")) {
+            return MODEL_TG4482PC2;
         }
     }
-    fclose(fp);
-    return model;
+
+    return MODEL_UNKNOWN;
 }
 
 /**
@@ -337,7 +403,7 @@ static void xmesh_print_dumps(commands_t *commands, int num_cmds) {
 static void xmesh_xle_dumps() {
     LOGINFO("================== MESH DIAGNOSTIC TOOL | XLE | DUMPS ==================\n");
     commands_t commands[] = {
-        {"Version           : ", "cat /version.txt | grep imagename -w | cut -d':' -f2"},
+        {"Version           : ", "sed -n 's/^imagename[:=]\"\\?\\([^\"]*\\)\"\\?/\\1/p' /version.txt"},
         {"Uptime            : ", "uptime"},
         {"Load Average      : ", "cat /proc/loadavg"},
         {"CPU               :\n", "mpstat"},
@@ -839,7 +905,7 @@ results:
 static void xmesh_xb_dumps() {
     LOGINFO("================== MESH DIAGNOSTIC TOOL | XB | DUMPS ===================\n");
     commands_t commands[] = {
-        {"Version           : ",  "cat /version.txt | grep imagename -w | cut -d':' -f2"},
+        {"Version           : ",  "sed -n 's/^imagename[:=]\"\\?\\([^\"]*\\)\"\\?/\\1/p' /version.txt"},
         {"Uptime            : ",  "uptime"},
         {"Load Average      : ",  "cat /proc/loadavg"},
         {"Default IP route  : ",  "ip route show default"},
