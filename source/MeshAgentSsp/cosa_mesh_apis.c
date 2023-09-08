@@ -344,8 +344,7 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_WIFI_RADIO_OPERATING_STD,         "MESH_WIFI_RADIO_OPERATING_STD",        "wifi_RadioOperatingStd"},
     {MESH_SYNC_SM_PAUSE,                    "MESH_SYNC_SM_PAUSE",                   "mesh_sm_pause"},
     {MESH_WIFI_OFF_CHAN_ENABLE,             "MESH_WIFI_OFF_CHAN_ENABLE",            "wifi_OffChannelScanEnable"},
-    {MESH_GATEWAY_ENABLE,                   "MESH_GATEWAY_ENABLE",                  "mesh_switch_to_gateway"},
-    {MESH_SOFTWDS_RFC_ENABLE,               "MESH_SOFTWDS_RFC_ENABLE",              "mesh_softwds"}
+    {MESH_GATEWAY_ENABLE,                   "MESH_GATEWAY_ENABLE",                  "mesh_switch_to_gateway"}
 #ifdef ONEWIFI
     ,
     {MESH_SYNC_STATUS,                      "MESH_SYNC_STATUS",                     "mesh_led_status"},
@@ -2507,38 +2506,6 @@ static void meshSetXleModeCloudCtrlEnableSyscfg(bool enable)
 }
 #endif
 
-static bool Mesh_SetMeshSoftwdsSyscfg (bool enable)
-{
-    int i = 0;
-    bool success = false;
-
-    MeshInfo("%s Setting Softwds in syscfg to %d\n", __FUNCTION__, enable);
-    if(Mesh_SysCfgSetStr(meshSyncMsgArr[MESH_SOFTWDS_RFC_ENABLE].sysStr, (enable?"true":"false"), true) != 0)
-    {
-        MeshInfo("Failed to set the Softwds in syscfg, retrying 5 times\n");
-        for(i=0; i<5; i++)
-        {
-            if(!Mesh_SysCfgSetStr(meshSyncMsgArr[MESH_SOFTWDS_RFC_ENABLE].sysStr, (enable?"true":"false"), true))
-            {
-                MeshInfo("softwds syscfg set passed in %d attempt\n", i+1);
-                success = true;
-                break;
-             }
-             else
-             {
-                 MeshInfo("softwds syscfg set retrial failed in %d attempt\n", i+1);
-             }
-        }
-    }
-    else
-    {
-        MeshInfo("softwds set in the syscfg successfully\n");
-        success = true;
-    }
-
-    return success;
-}
-
 static bool meshSetGreAccSyscfg(bool enable)
 {
     int i = 0;
@@ -3836,28 +3803,6 @@ bool Mesh_SetMeshRetryOptimized(bool enable, bool init, bool commitSyscfg)
 }
 
 /**
- * @brief Mesh Softwds Enable/Disable
- *
- * This function will enable/disable the Mesh Softwds
- */
-bool Mesh_SetMeshSoftwds(bool enable, bool init, bool commitSyscfg)
-{
-    // If the enable value is different or this is during setup - make it happen.
-    if (init || Mesh_GetEnabled(meshSyncMsgArr[MESH_SOFTWDS_RFC_ENABLE].sysStr) != enable)
-    {
-        MeshInfo("%s: softwds_enable Commit:%d, Enable:%d\n",
-            __FUNCTION__, commitSyscfg, enable);
-        if(commitSyscfg) {
-            Mesh_SetMeshSoftwdsSyscfg(enable);
-        }
-        g_pMeshAgent->MeshSoftwdsEnable = enable;
-        //Send this as an RFC update to plume manager
-        Mesh_sendRFCUpdate("Softwds.Enable", enable ? "true" : "false", rfc_boolean);
-    }
-    return TRUE;
-}
-
-/**
  * @brief Mesh Agent GREAcceleration Set Enable/Disable
  *
  * This function will enable/disable the GRE acceleration mode
@@ -4670,38 +4615,6 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
             {
                 MeshInfo("Cache Status error, setting default\n");
                 Mesh_SetCacheStatus(false, true, true);
-            }
-        }
-    }
-
-    out_val[0]='\0';
-    if (Mesh_SysCfgGetStr("mesh_softwds", out_val, sizeof(out_val)) != 0)
-    {
-        MeshInfo("Syscfg error, Setting softwds Status to default\n");
-        Mesh_SetMeshSoftwds(false, true, true);
-    }
-    else
-    {
-        rc = strcmp_s("true", strlen("true"), out_val, &ind);
-        ERR_CHK(rc);
-        if ((ind == 0) && (rc == EOK))
-        {
-            MeshInfo("Setting initial softwds rfc to true\n");
-            Mesh_SetMeshSoftwds(true, true, false);
-        }
-        else
-        {
-            rc = strcmp_s("false", strlen("false"), out_val, &ind);
-            ERR_CHK(rc);
-            if ((ind == 0) && (rc == EOK))
-            {
-                MeshInfo("Setting initial softwds rfc to false\n");
-                Mesh_SetMeshSoftwds(false, true, false);
-            }
-            else
-            {
-                MeshInfo("mesh_softwds Status error, setting default\n");
-                Mesh_SetMeshSoftwds(false, true, true);
             }
         }
     }

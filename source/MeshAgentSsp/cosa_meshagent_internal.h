@@ -34,7 +34,6 @@ _COSA_DATAMODEL_MESHAGENT
     BOOL                        XleModeCloudCtrlEnable;
     BOOL                        OvsEnable;
     BOOL                        GreAccEnable;
-    BOOL                        MeshSoftwdsEnable;
     BOOL                        OpensyncEnable;
     BOOL                        CacheEnable;
     BOOL                        MeshRetryOptimized;
