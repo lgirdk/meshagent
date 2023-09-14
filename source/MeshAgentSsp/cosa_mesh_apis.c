@@ -4138,7 +4138,7 @@ void* handleMeshEnable(void *Args)
             if ((err = svcagt_get_service_state(meshServiceName)) == 1)
             {
                 // returns "0" on success
-                if ((err = mesh_waitRestart()) != 0)
+                if ((err = svcagt_set_service_state(meshServiceName, false)) != 0)
                 {
                     meshSetSyscfg(0, true);
                     error = MB_ERROR_MESH_SERVICE_STOP_FAIL;
