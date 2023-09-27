@@ -3552,7 +3552,7 @@ void  *handle_rbus_Subscribe()
                 meshRbusEvent[i].status = true;
             }
 	}
-	i = (i-- < 0)?(MESH_RBUS_EVENT_TOTAL-1):i;
+	i = (--i < 0)?(MESH_RBUS_EVENT_TOTAL-1):i;
     }
     MeshInfo("handle_rbus_Subscribe thread exited");
     return NULL;
