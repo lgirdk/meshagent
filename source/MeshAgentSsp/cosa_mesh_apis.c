@@ -152,7 +152,7 @@ extern char g_Subsystem[32];
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
 #define      RBUS_STA_CONNECT_TIMEOUT "Device.WiFi.STAConnectionTimeout"
 #endif
-#if defined(WAN_FAILOVER_SUPPORTED)
+#if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED)
 #define      RBUS_WAN_CURRENT_ACTIVE_INTERFACE "Device.X_RDK_WanManager.CurrentActiveInterface"
 #define      REMOTE_INTERFACE_NAME             "brRWAN"
 
