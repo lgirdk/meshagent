@@ -205,6 +205,8 @@ int svcagt_set_service_state (const char *svc_name, bool state)
 	return exit_code;
 }
 
+#if 0
+/* systemctl based code won't work... but function isn't used so we can just disable */
 int svcagt_set_service_restart (const char *svc_name)
 {
         int exit_code = 0;
@@ -214,6 +216,7 @@ int svcagt_set_service_restart (const char *svc_name)
                 CcspTraceError(("Command systemctl restart %s.service failed with exit %d, errno %s\n", svc_name, exit_code, strerror(errno)));
         return exit_code;
 }
+#endif
 
 bool ping_ip (char *ip)
 {
