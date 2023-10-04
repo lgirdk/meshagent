@@ -3177,9 +3177,9 @@ int mesh_waitRestart()
 	//or wait for 120 or wait till the file is deleted
 #endif
         MeshInfo("Restart Mesh start\n");
-        if ((err = svcagt_set_service_restart (meshServiceName)) != 0)
+        if ((err = svcagt_set_service_state(meshServiceName, true)) != 0)
         {
-            MeshInfo("Restart Mesh failed\n");
+             MeshWarning("Restart Mesh failed\n");
         }
 #ifdef RDKB_EXTENDER_ENABLED
 	if(!access("/tmp/mesh_handler_stop_check", F_OK )) {
