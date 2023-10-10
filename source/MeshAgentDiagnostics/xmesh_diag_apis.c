@@ -101,7 +101,7 @@ count_t g_count;
 static pthread_t xmesh_tid;
 static pthread_mutex_t xmesh_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool   g_xmesh_active = false;
-static time_t g_start_time=0;
+static struct timespec g_start_time;
 
 /**
  * Root Servers based on https://www.iana.org/domains/root/servers
@@ -1273,7 +1273,7 @@ void xmesh_diag_start(int interval, bool dumps_enabled, bool wfo, int delay) {
     LOGINFO("WFO diag enabled   : %s\n",diag_args.wfo ? "true" : "false");
     LOGINFO("Delayed start      : %d\n",diag_args.delay);
     g_xmesh_active = true;
-    g_start_time = time(NULL);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &g_start_time);
     memset(&g_count, 0, sizeof(g_count));
     pthread_create(&xmesh_tid, NULL, start_diagnostics, &diag_args);
 }
@@ -1290,8 +1290,9 @@ void xmesh_diag_stop() {
     pthread_join(xmesh_tid,NULL);
     g_xmesh_active = false;
 
-    time_t now = time(NULL);
-    time_t session_duration = now - g_start_time;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+    time_t session_duration = now.tv_sec - g_start_time.tv_sec;
 
     LOGINFO("================== MESH DIAGNOSTIC TOOL OVERALL STATS ==================\n");
     LOGINFO("Session total duration (in seconds) : %ld\n", session_duration);
