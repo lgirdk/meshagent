@@ -527,6 +527,17 @@ MeshAgent_GetParamStringValue
         return 0;
     }
 
+    if (strcmp(ParamName, "MwoBroker") == 0)
+    {
+        errno_t rc = strcpy_s(pValue, *pUlSize, g_pMeshAgent->meshWifiOptMqttBroker);
+        if (rc != EOK)
+        {
+            ERR_CHK(rc);
+            return -1;
+        }
+        return 0;
+    }
+
     if (strcmp(ParamName, "X_RDKCENTRAL-COM_Connected-Client") == 0)
     {
         strcpy(pValue, "");
@@ -594,6 +605,12 @@ MeshAgent_GetParamUlongValue
     if (strcmp(ParamName, "State") == 0)
     {
         *puLong = g_pMeshAgent->meshState;
+        return TRUE;
+    }
+
+    if (strcmp(ParamName, "Mode") == 0)
+    {
+        *puLong = g_pMeshAgent->meshWifiOptimizationMode;
         return TRUE;
     }
 
@@ -1071,6 +1088,14 @@ MeshAgent_SetParamUlongValue
         }
     }
 
+    if (strcmp(ParamName, "Mode") == 0)
+    {
+        if ((long)puLong >= MESH_MODE_OFF && puLong < MESH_MODE_TOTAL) {
+            Mesh_SetMeshWifiOptimizationMode(puLong, false, true);
+            return TRUE;
+        }
+    }
+
     MeshWarning("Unsupported parameter '%s'\n", ParamName);
 
     return FALSE;
@@ -1121,6 +1146,12 @@ MeshAgent_SetParamStringValue
     if (strcmp(ParamName, "URL") == 0)
     {
         Mesh_SetUrl(pString, false);
+        return TRUE;
+    }
+
+    if (strcmp(ParamName, "MwoBroker") == 0)
+    {
+        Mesh_SetMeshWifiOptimizationMqttBroker(pString, false, true);
         return TRUE;
     }
 

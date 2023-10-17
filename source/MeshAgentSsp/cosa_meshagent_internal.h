@@ -41,6 +41,8 @@ _COSA_DATAMODEL_MESHAGENT
     UCHAR                       meshUrl[256];
     eMeshWifiStatusType         meshStatus;
     eMeshStateType              meshState;
+    eWifiOptimizationMode       meshWifiOptimizationMode;
+    UCHAR                       meshWifiOptMqttBroker[128];
 }
 COSA_DATAMODEL_MESHAGENT,  *PCOSA_DATAMODEL_MESHAGENT;
 

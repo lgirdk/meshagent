@@ -115,9 +115,11 @@ const int MAX_MESSAGES=10;  // max number of messages the can be in the queue
 #define STATE_FALSE "false"
 #define LS_READ_TIMEOUT_MS 2000
 #define ETH_EBHAUL  "ethpod"
+#define MQTT_LOCAL_MQTT_BROKER "192.168.245.254:1883"
 
 #define OVS_ENABLED    "/sys/module/openvswitch"
 
+static bool isReserveModeActive = false;
 static bool isPaceXF3 = false;
 static bool isSkyHUB4 = false;
 static bool isCBR2 = false;
@@ -346,7 +348,9 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_WIFI_RADIO_OPERATING_STD,         "MESH_WIFI_RADIO_OPERATING_STD",        "wifi_RadioOperatingStd"},
     {MESH_SYNC_SM_PAUSE,                    "MESH_SYNC_SM_PAUSE",                   "mesh_sm_pause"},
     {MESH_WIFI_OFF_CHAN_ENABLE,             "MESH_WIFI_OFF_CHAN_ENABLE",            "wifi_OffChannelScanEnable"},
-    {MESH_GATEWAY_ENABLE,                   "MESH_GATEWAY_ENABLE",                  "mesh_switch_to_gateway"}
+    {MESH_GATEWAY_ENABLE,                   "MESH_GATEWAY_ENABLE",                  "mesh_switch_to_gateway"},
+    {MESH_WIFI_OPT_MODE,                    "MESH_WIFI_OPT_MODE",                   "mesh_optimized_mode"},
+    {MESH_WIFI_OPT_BROKER,                  "MESH_WIFI_OPT_BROKER",                 "mwo_mqtt_config"}
 #ifdef ONEWIFI
     ,
     {MESH_SYNC_STATUS,                      "MESH_SYNC_STATUS",                     "mesh_led_status"},
@@ -394,6 +398,8 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject);
 static bool Mesh_Register_sysevent(ANSC_HANDLE hThisObject);
 static void *Mesh_sysevent_handler(void *data);
 static void Mesh_sendReducedRetry(bool value);
+static void Mesh_sendmeshWifiOptimization(eWifiOptimizationMode mode);
+static void Mesh_sendmeshWifiMqtt(char *val);
 #if defined(WAN_FAILOVER_SUPPORTED)
 void Mesh_backup_network(char *ifname, eMeshDeviceMode type, bool status);
 #endif
@@ -3831,6 +3837,124 @@ bool Mesh_SetMeshRetryOptimized(bool enable, bool init, bool commitSyscfg)
     return TRUE;
 }
 
+void MeshWifiOptimizationHandle(eWifiOptimizationMode mode)
+{
+    bool mesh_is_enabled = false;
+    int err = 0;
+
+    mesh_is_enabled = Mesh_GetEnabled(meshSyncMsgArr[MESH_WIFI_ENABLE].sysStr);
+
+    switch (mode)
+    {
+        case MESH_MODE_MONITOR:
+             if (!mesh_is_enabled)
+             {
+                 MeshInfo("MWO Reserve mode: mwo will enter into monitor mode when mesh gets enabled\n");
+                 isReserveModeActive = true;
+                 if ((err = svcagt_get_service_state(meshServiceName)) == 1)
+                 {
+                     if ((err = svcagt_set_service_state(meshServiceName, false)) != 0)
+                         MeshInfo("In Opt mode MONITOR and mesh is disabled, mesh stop failed\n");
+                 }
+             }
+             else
+                 Mesh_sendmeshWifiOptimization(mode);
+        break;
+        case MESH_MODE_OFFLINE:
+            if (mesh_is_enabled)
+            {
+                MeshInfo("MWO Reserve mode: mwo will enter into offline mode when mesh gets disabled\n");
+            }
+            else
+            {
+                //Mesh Disabled, also device mode is offline, so mesh should run in offline mode
+                if ((err = mesh_waitRestart()) != 0)
+                {
+                    MeshError("meshwifi service failed to start when mesh is disabled and mode is offline\n");
+                }
+            }
+            isReserveModeActive = true;
+        break;
+        case MESH_MODE_OFF:
+            if (mesh_is_enabled)
+            {
+                MeshInfo("Wifi optimization is send as OFF\n");
+                Mesh_sendmeshWifiOptimization(mode);
+            }
+            else
+            {
+                MeshInfo("If opensync is running just disable it, because mode is Off\n");
+                if ((err = svcagt_get_service_state(meshServiceName)) == 1)
+                {
+                    if ((err = svcagt_set_service_state(meshServiceName, false)) != 0)
+                        MeshInfo("In Opt mode OFF and mesh is disabled, mesh stop failed\n");
+                }
+            }
+        break;
+        default:
+            MeshInfo("Wrong device mode\n");
+        break;
+    }
+}
+
+/**
+ * @brief Mesh Wifi Optimization mode
+ *
+ * This function will set 0 - off, 1 - monitor, 2 - offline
+ */
+bool Mesh_SetMeshWifiOptimizationMode(eWifiOptimizationMode uValue, bool init, bool commitSyscfg)
+{
+    int mode = uValue;
+
+    // If the enable value is different or this is during setup - make it happen.
+    if (init || Mesh_SysCfgGetInt(meshSyncMsgArr[MESH_WIFI_OPT_MODE].sysStr) != mode)
+    {
+        MeshInfo("%s: mesh_wifi_optimization_mode: %d\n",__FUNCTION__,uValue);
+        if(commitSyscfg) {
+            if (syscfg_set_u_commit(NULL, meshSyncMsgArr[MESH_WIFI_OPT_MODE].sysStr, uValue) != 0)
+                MeshError("Unable to set %s to :%d,\n",meshSyncMsgArr[MESH_WIFI_OPT_MODE].sysStr,uValue);
+        }
+        MeshWifiOptimizationHandle(uValue);
+        g_pMeshAgent->meshWifiOptimizationMode = uValue;
+    }
+    return TRUE;
+}
+
+/**
+ * @brief Mesh Wifi Optimization mqtt broker
+ *
+ * This function will set ip
+ */
+
+bool Mesh_SetMeshWifiOptimizationMqttBroker(char *broker, bool init, bool commitSyscfg)
+{
+
+    static unsigned char out_val[128];
+    errno_t rc = -1;
+    int     ind      = -1;
+
+    out_val[0]='\0';
+    if( init || (Mesh_SysCfgGetStr(meshSyncMsgArr[MESH_WIFI_OPT_BROKER].sysStr, out_val, sizeof(out_val)) == 0))
+    {
+        rc = strcmp_s(broker,strlen(broker),out_val,&ind);
+        ERR_CHK(rc);
+        if(((ind!=0) && (rc == EOK))||init)
+        {
+            if (commitSyscfg)
+                Mesh_SysCfgSetStr(meshSyncMsgArr[MESH_WIFI_OPT_BROKER].sysStr, broker, false);
+            rc = strcpy_s(g_pMeshAgent->meshWifiOptMqttBroker, sizeof(g_pMeshAgent->meshWifiOptMqttBroker), broker);
+            if(rc != EOK)
+            {
+               ERR_CHK(rc);
+               MeshError("Error in copying broker to data model g_pMeshAgent->meshWifiOptMqttBroker\n");
+            }
+            if (g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_OFF)
+                Mesh_sendmeshWifiMqtt(broker);
+        }
+    }
+    return true;
+}
+
 /**
  * @brief Mesh Agent GREAcceleration Set Enable/Disable
  *
@@ -4129,17 +4253,46 @@ void* handleMeshEnable(void *Args)
                     success = FALSE;
                 }
             }
+            else if ((!is_meshenable_waiting) && (((err = svcagt_get_service_state(meshServiceName)) == 1)&&(isReserveModeActive)))
+            {
+                if ((err = mesh_waitRestart()) != 0)
+                {
+                    MeshError("meshwifi service failed to run in reserve mode, igonoring the mesh enablement\n");
+                    success = FALSE;
+                }
+                if (g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_OFFLINE)
+                    isReserveModeActive = false;
+                else
+                   MeshInfo("MWO Reserve mode: mwo will enter into offline mode when mesh gets disabled\n");
+            }
+            else
+                MeshInfo("Not supported\n");
+
          } else {
             // This will only work if this service is started *AFTER* CcspWifi
             // If the service is running, stop it
             if ((err = svcagt_get_service_state(meshServiceName)) == 1)
             {
-                // returns "0" on success
-                if ((err = svcagt_set_service_state(meshServiceName, false)) != 0)
+                //Check for reserve mode, if in reserve mode restart opensync
+                if (isReserveModeActive && (g_pMeshAgent->meshWifiOptimizationMode == MESH_MODE_OFFLINE))
                 {
-                    meshSetSyscfg(0, true);
-                    error = MB_ERROR_MESH_SERVICE_STOP_FAIL;
-                    success = FALSE;
+                    if ((err = mesh_waitRestart()) != 0)
+                    {
+                        MeshError("meshwifi service failed to run in reserve mode, igonoring the mesh enablement\n");
+                        success = FALSE;
+                    }
+                    if (g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_OFFLINE)
+                        isReserveModeActive = false;
+                }
+                else
+                {
+                    // returns "0" on success
+                    if ((err = svcagt_set_service_state(meshServiceName, false)) != 0)
+                    {
+                        meshSetSyscfg(0, true);
+                        error = MB_ERROR_MESH_SERVICE_STOP_FAIL;
+                        success = FALSE;
+                    }
                 }
             }
         }
@@ -4502,6 +4655,31 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
            }
         }
     }
+
+    int mode_val;
+    mode_val = Mesh_SysCfgGetInt(meshSyncMsgArr[MESH_WIFI_OPT_MODE].sysStr);
+    MeshInfo("Syscfg get, MESH_WIFI_OPT_MODE : %d\n",mode_val);
+    if(mode_val  == 0)
+    {
+        MeshInfo("Syscfg, Setting MESH_WIFI_OPT_MODE to default OFF\n");
+        Mesh_SetMeshWifiOptimizationMode(MESH_MODE_OFF, false, true);
+    }
+    else
+    {
+        Mesh_SetMeshWifiOptimizationMode(mode_val, true, false);
+    }
+
+    out_val[0]='\0';
+    if(Mesh_SysCfgGetStr(meshSyncMsgArr[MESH_WIFI_OPT_BROKER].sysStr, out_val, sizeof(out_val)) != 0)
+    {
+        MeshInfo("Syscfg error, Setting any default value for mqtt brocker: %s\n",MQTT_LOCAL_MQTT_BROKER);
+        Mesh_SetMeshWifiOptimizationMqttBroker(MQTT_LOCAL_MQTT_BROKER,true,true);
+    }
+    else
+    {
+        Mesh_SetMeshWifiOptimizationMqttBroker(out_val,true,false);
+    }
+
 #ifdef ONEWIFI
     out_val[0]='\0';
     if(Mesh_SysCfgGetStr(meshSyncMsgArr[MESH_XLE_MODE_CLOUD_CTRL_RFC].sysStr, out_val, sizeof(out_val)) != 0)
@@ -4837,6 +5015,76 @@ static void Mesh_sendReducedRetry(bool value)
     mMsg.msgType = MESH_REDUCED_RETRY;
     mMsg.data.retryFlag.isenabled = value;
     msgQSend(&mMsg);
+}
+
+/**
+ * @brief Mesh Agent send mesh wifi optimization mode  to plume managers
+ *
+ * This function will send mesh wifi optimization mode
+ * disabled = 0, monitor = 1, offline = 2,
+ */
+static void Mesh_sendmeshWifiOptimization(eWifiOptimizationMode mode)
+{
+    // send out notification to plume
+    MeshSync mMsg = {0};
+    // Notify plume manager cm
+    // Set sync message type
+    mMsg.msgType = MESH_WIFI_OPT_MODE;
+    mMsg.data.meshwifiOpt.mode = mode;
+    msgQSend(&mMsg);
+}
+
+
+/**
+ * @brief Mesh Agent send mesh wifi optimization mode to plume managers
+ *
+ * This function will send local mqtt broker info
+ */
+static void Mesh_sendmeshWifiMqtt( char *val)
+{
+    // send out notification to plume
+    MeshSync mMsg = {0};
+    char *token;
+    char *delim = ":";
+    char *contextStr = NULL;
+    bool valFound = false;
+    int idx = 0;
+    int rc = 0;
+
+    token = strtok_r(val, delim, &contextStr);
+    while( token != NULL)
+    {
+        switch (idx)
+        {
+            case 0:
+                rc = strcpy_s(mMsg.data.meshwifiOptMqttBroker.ip, sizeof(mMsg.data.meshwifiOptMqttBroker.ip), token);
+                if(rc != EOK)
+                {
+                   ERR_CHK(rc);
+                   MeshError("Error in copying mqtt broker ip\n");
+                }
+                else
+                    valFound = true;
+                break;
+
+            case 1:
+                mMsg.data.meshwifiOptMqttBroker.port = strtol(token,NULL,10);
+                valFound = true;
+                break;
+
+             default:
+               break;
+        }
+        token = strtok_r(NULL, delim,&contextStr);
+        idx++;
+    }
+    contextStr = NULL;
+    // Notify plume manager qm, to reconnect if to new mqtt broker
+    // if wifi opt mode is monitor
+    // Set sync message type
+    mMsg.msgType = MESH_WIFI_OPT_BROKER;
+    if (valFound)
+        msgQSend(&mMsg);
 }
 
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)

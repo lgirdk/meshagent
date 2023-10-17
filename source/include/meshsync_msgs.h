@@ -58,6 +58,7 @@
 #endif
 #define MAX_IFNAME_LEN       64
 #define MAX_IF               3
+#define MAX_IPV4_LENGTH      16
 
 #if defined(ENABLE_MESH_SOCKETS)
 /**************************************************************************/
@@ -113,6 +114,8 @@ typedef enum {
     MESH_SYNC_SM_PAUSE,
     MESH_WIFI_OFF_CHAN_ENABLE,
     MESH_GATEWAY_ENABLE,
+    MESH_WIFI_OPT_MODE,
+    MESH_WIFI_OPT_BROKER,
 #if defined(ONEWIFI)
     MESH_SYNC_STATUS,
     MESH_CONTROLLER_STATUS,
@@ -167,6 +170,16 @@ typedef enum {
     MESH_STATE_WIFI_RESET,
     MESH_STATE_TOTAL
 } eMeshStateType;
+
+/**
+ * Mesh WifiOptimization Mode
+ */
+typedef enum {
+    MESH_MODE_OFF = 0,
+    MESH_MODE_MONITOR,
+    MESH_MODE_OFFLINE,
+    MESH_MODE_TOTAL
+} eWifiOptimizationMode;
 
 /**
  * Mesh Status states
@@ -359,6 +372,18 @@ typedef struct _MeshGatewayEnable {
     uint8_t enable;
 }MeshGatewayEnable;
 
+/**
+ * Mesh wifi optimization mode
+ */
+typedef struct _MeshWifiOptimizationMode {
+    eWifiOptimizationMode mode;
+}MeshWifiOptimizationMode;
+
+typedef struct _MeshWifiOptMqttBroker {
+    char ip [MAX_IPV4_LENGTH];
+    int port;
+}MeshWifiOptMqttBroker;
+
 #ifdef WAN_FAILOVER_SUPPORTED
 /**
  * Mesh Network Type message
@@ -548,6 +573,8 @@ typedef struct _MeshSync {
         MeshReducedRetry                retryFlag;
         MeshSyncSMPause                 speedtestCfg;
         MeshGatewayEnable               gateway;
+        MeshWifiOptimizationMode        meshwifiOpt;
+        MeshWifiOptMqttBroker           meshwifiOptMqttBroker;
 #ifdef WAN_FAILOVER_SUPPORTED
         MeshNetworkType                 networkType;
         MeshWFOEnabledStatus            meshWFOEnabled;

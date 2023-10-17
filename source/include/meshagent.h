@@ -101,6 +101,21 @@ bool Mesh_SetEnabled(bool enable, bool init, bool commitSyscfg);
 bool Mesh_SetMeshState(eMeshStateType state, bool init, bool commit);
 
 /**
+ * @brief Mesh Agent Set Mesh Wifi optimization
+ *
+ * This function will set the Mesh Wifi Optimization mode.
+ * off, monitor, offline.
+ */
+bool Mesh_SetMeshWifiOptimizationMode(eWifiOptimizationMode uValue, bool init, bool commitSyscfg);
+
+/**
+ * @brief Mesh Agent Set Mesh mqtt broker
+ *
+ * This function will set the Mesh mqtt broker ip and port..
+ */
+bool Mesh_SetMeshWifiOptimizationMqttBroker(char *broker, bool init, bool commitSyscfg);
+
+/**
  * @brief Mesh Agent Ge tEnable/Disable
  *
  * This function will enable/disable the Mesh service
