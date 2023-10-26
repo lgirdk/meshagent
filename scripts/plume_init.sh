@@ -7,6 +7,23 @@ then
     exit 1
 fi
 
+#This is as part of ECO-2838(Only part 1 is implemented, part is done later, when the solution is added as a feature for all pltforms).
+#part 1: Select channel 44 on device reboot when plume is enabled and reset when plume is disabled.
+#part 2: Select the 2.4GHz channel that was selected by plume earlier. TODO
+
+CHANNEL_SET_DONE=/tmp/channel_set_done
+set_channel()
+{
+    cfg -a AP_PRIMARY_CH_2=44
+    cfg -c
+}
+
+reset_channel()
+{
+    cfg -a AP_PRIMARY_CH_2=0
+    cfg -c
+}
+
 start_plume() {
 
     while [ ! -f /tmp/meshagent_initialized ]
@@ -25,6 +42,10 @@ start_plume() {
 
     if [ "$son_admin" != "1" ]; then
         echo "Plume son_admin_status disabled"
+        if [ -f "$CHANNEL_SET_DONE" ]; then
+            reset_channel
+            rm "$CHANNEL_SET_DONE"
+        fi
         exit 1
     fi
 
@@ -39,6 +60,10 @@ start_plume() {
 
     if [ "$son_operation" != "1" ]; then
         echo "Plume son_operational_status disabled"
+        if [ -f "$CHANNEL_SET_DONE" ]; then
+            reset_channel
+            rm "$CHANNEL_SET_DONE"
+        fi
         exit 1
     fi
 
@@ -56,6 +81,10 @@ start_plume() {
     echo "Starting Plume manager"
 
     if [ "$BOX_TYPE" = "MV1" ]; then
+        if [ ! -f "$CHANNEL_SET_DONE" ]; then
+            set_channel
+            touch "$CHANNEL_SET_DONE"
+        fi
         /usr/plume/scripts/managers.init start
     else
        /usr/bin/sysevent set mesh_enable "RDK|true"
