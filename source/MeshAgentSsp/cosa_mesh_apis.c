@@ -3011,8 +3011,6 @@ rbusError_t rbusGetBoolHandler(rbusHandle_t handle, rbusProperty_t property, rbu
     (void)handle;
     (void)opts;
 
-    MeshInfo("Called get bool handler for [%s]\n", name);
-
     rbusValue_t value;
     rbusValue_Init(&value);
 
