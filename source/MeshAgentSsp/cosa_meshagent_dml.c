@@ -1090,7 +1090,7 @@ MeshAgent_SetParamUlongValue
 
     if (strcmp(ParamName, "Mode") == 0)
     {
-        if ((long)puLong >= MESH_MODE_OFF && puLong < MESH_MODE_TOTAL) {
+        if ((long)puLong >= MESH_MODE_DISABLE && puLong < MESH_MODE_TOTAL) {
             Mesh_SetMeshWifiOptimizationMode(puLong, false, true);
             return TRUE;
         }

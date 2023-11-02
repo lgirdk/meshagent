@@ -175,9 +175,9 @@ typedef enum {
  * Mesh WifiOptimization Mode
  */
 typedef enum {
-    MESH_MODE_OFF = 0,
+    MESH_MODE_DISABLE = 0,
     MESH_MODE_MONITOR,
-    MESH_MODE_OFFLINE,
+    MESH_MODE_ENABLE,
     MESH_MODE_TOTAL
 } eWifiOptimizationMode;
 

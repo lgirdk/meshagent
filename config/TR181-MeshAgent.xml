@@ -78,14 +78,14 @@
                                     <objectType>object</objectType>
                                     <functions>
                                         <func_GetParamStringValue>MeshAgent_GetParamStringValue</func_GetParamStringValue>
-                                        <func_GetParamUlongValue>MeshAgent_GetParamUlongValue</func_GetParamUlongValue> 
+                                        <func_GetParamUlongValue>MeshAgent_GetParamUlongValue</func_GetParamUlongValue>
                                         <func_SetParamStringValue>MeshAgent_SetParamStringValue</func_SetParamStringValue>
                                         <func_SetParamUlongValue>MeshAgent_SetParamUlongValue</func_SetParamUlongValue>
                                     </functions>
                                     <parameters>
                                         <parameter>
                                             <name>Mode</name>
-                                            <type>string: Off(0),Monitor(1),Offline(2)</type>
+                                            <type>string: Disable(0),Monitor(1),Enable(2)</type>
                                             <syntax>uint32/mapped</syntax>
                                             <writable>true</writable>
                                         </parameter>

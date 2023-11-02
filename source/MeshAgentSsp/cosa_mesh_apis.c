@@ -3849,7 +3849,7 @@ void MeshWifiOptimizationHandle(eWifiOptimizationMode mode)
         case MESH_MODE_MONITOR:
              if (!mesh_is_enabled)
              {
-                 MeshInfo("MWO Reserve mode: mwo will enter into monitor mode when mesh gets enabled\n");
+                 MeshInfo("HCM RFC Status: Monitor , HCM Device Status: %s , Reason: Mesh is disabled\n",(g_pMeshAgent->meshWifiOptimizationMode==MESH_MODE_ENABLE?"Enable":"Disable"));
                  isReserveModeActive = true;
                  if ((err = svcagt_get_service_state(meshServiceName)) == 1)
                  {
@@ -3858,16 +3858,20 @@ void MeshWifiOptimizationHandle(eWifiOptimizationMode mode)
                  }
              }
              else
+             {
+                 MeshInfo("HCM RFC Status: Monitor , HCM Device Status: Monitor , Reason: NA\n");
                  Mesh_sendmeshWifiOptimization(mode);
+             }
         break;
-        case MESH_MODE_OFFLINE:
+        case MESH_MODE_ENABLE:
             if (mesh_is_enabled)
             {
-                MeshInfo("MWO Reserve mode: mwo will enter into offline mode when mesh gets disabled\n");
+                MeshInfo("HCM RFC Status: Enable , HCM Device Status: %s , Reason: Mesh is Enabled\n",(g_pMeshAgent->meshWifiOptimizationMode==MESH_MODE_MONITOR?"Monitor":"Disable"));
             }
             else
             {
                 //Mesh Disabled, also device mode is offline, so mesh should run in offline mode
+                MeshInfo("HCM RFC Status: Enable , HCM Device Status: Enable , Reason: NA\n");
                 if ((err = mesh_waitRestart()) != 0)
                 {
                     MeshError("meshwifi service failed to start when mesh is disabled and mode is offline\n");
@@ -3875,7 +3879,7 @@ void MeshWifiOptimizationHandle(eWifiOptimizationMode mode)
             }
             isReserveModeActive = true;
         break;
-        case MESH_MODE_OFF:
+        case MESH_MODE_DISABLE:
             if (mesh_is_enabled)
             {
                 MeshInfo("Wifi optimization is send as OFF\n");
@@ -3883,7 +3887,7 @@ void MeshWifiOptimizationHandle(eWifiOptimizationMode mode)
             }
             else
             {
-                MeshInfo("If opensync is running just disable it, because mode is Off\n");
+                MeshInfo("HCM RFC Status: Disable , HCM Device Status: %s , Reason: Mesh is Disabled\n",(g_pMeshAgent->meshWifiOptimizationMode==MESH_MODE_MONITOR?"Monitor":"Enable"));
                 if ((err = svcagt_get_service_state(meshServiceName)) == 1)
                 {
                     if ((err = svcagt_set_service_state(meshServiceName, false)) != 0)
@@ -3948,7 +3952,7 @@ bool Mesh_SetMeshWifiOptimizationMqttBroker(char *broker, bool init, bool commit
                ERR_CHK(rc);
                MeshError("Error in copying broker to data model g_pMeshAgent->meshWifiOptMqttBroker\n");
             }
-            if (g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_OFF)
+            if (g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_DISABLE)
                 Mesh_sendmeshWifiMqtt(broker);
         }
     }
@@ -4260,7 +4264,7 @@ void* handleMeshEnable(void *Args)
                     MeshError("meshwifi service failed to run in reserve mode, igonoring the mesh enablement\n");
                     success = FALSE;
                 }
-                if (g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_OFFLINE)
+                if (g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_ENABLE)
                     isReserveModeActive = false;
                 else
                    MeshInfo("MWO Reserve mode: mwo will enter into offline mode when mesh gets disabled\n");
@@ -4274,14 +4278,14 @@ void* handleMeshEnable(void *Args)
             if ((err = svcagt_get_service_state(meshServiceName)) == 1)
             {
                 //Check for reserve mode, if in reserve mode restart opensync
-                if (isReserveModeActive && (g_pMeshAgent->meshWifiOptimizationMode == MESH_MODE_OFFLINE))
+                if (isReserveModeActive && (g_pMeshAgent->meshWifiOptimizationMode == MESH_MODE_ENABLE))
                 {
                     if ((err = mesh_waitRestart()) != 0)
                     {
                         MeshError("meshwifi service failed to run in reserve mode, igonoring the mesh enablement\n");
                         success = FALSE;
                     }
-                    if (g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_OFFLINE)
+                    if (g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_ENABLE)
                         isReserveModeActive = false;
                 }
                 else
@@ -4662,7 +4666,7 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
     if(mode_val  == 0)
     {
         MeshInfo("Syscfg, Setting MESH_WIFI_OPT_MODE to default OFF\n");
-        Mesh_SetMeshWifiOptimizationMode(MESH_MODE_OFF, false, true);
+        Mesh_SetMeshWifiOptimizationMode(MESH_MODE_DISABLE, false, true);
     }
     else
     {
