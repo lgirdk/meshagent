@@ -106,6 +106,7 @@ const int MAX_MESSAGES=10;  // max number of messages the can be in the queue
 #define XF3_PLATFORM  "XF3"
 #define XB3_PLATFORM  "XB3"
 #define HUB4_PLATFORM "HUB4"
+#define CBR2_PLATFORM "TCCBR"
 #define RADIO_ENABLE_24  "Device.WiFi.Radio.1.Enable"
 #define RADIO_ENABLE_50  "Device.WiFi.Radio.2.Enable"
 #define RADIO_STATUS_24  "Device.WiFi.Radio.1.Status"
@@ -119,6 +120,7 @@ const int MAX_MESSAGES=10;  // max number of messages the can be in the queue
 
 static bool isPaceXF3 = false;
 static bool isSkyHUB4 = false;
+static bool isCBR2 = false;
 bool isXB3Platform = false;
 #define ETHBHAUL_SWITCH "/usr/sbin/deviceinfo.sh"
 #define MESH_BHAUL_INETADDR "192.168.245.254"
@@ -565,7 +567,7 @@ static int Mesh_DnsmasqSock(void)
     return 0;
   dnsserverAddr.sin_family = AF_INET;
   dnsserverAddr.sin_port = htons(47030);
-  if(!isValidIpAddress(armIP)) {
+  if((!isValidIpAddress(armIP)) || (isCBR2))  {
    MeshInfo("Socket bind to localhost\n");
    dnsserverAddr.sin_addr.s_addr = inet_addr(LOCAL_HOST);
   } else
@@ -2185,9 +2187,11 @@ static void is_xf3_xb3_platform(void)
         isXB3Platform = true;
     } else if (strncmp(HUB4_PLATFORM, platform, sizeof(HUB4_PLATFORM)) == 0) {
         isSkyHUB4 = true;
+    } else if (strncmp(CBR2_PLATFORM, platform, sizeof(CBR2_PLATFORM)) == 0) {
+        isCBR2 = true;
     }
-    MeshInfo("platform check XF3:%d, XB3:%d HUB4:%d\n",
-                    isPaceXF3, isXB3Platform, isSkyHUB4);
+    MeshInfo("platform check XF3:%d, XB3:%d HUB4:%d CBR2:%d\n",
+                    isPaceXF3, isXB3Platform, isSkyHUB4, isCBR2);
 }
 
 static BOOL radio_check(void)
