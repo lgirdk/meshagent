@@ -75,6 +75,14 @@ start_plume() {
 
     if [ "$br_mode" != "0" ]; then
         echo "In Bridge mode, opensync disabled"
+        if [ "$BOX_TYPE" = "MV1" ]; then
+              ifconfig eth0.200 > /dev/null 2>&1
+              if [ $? = "0" ]; then
+                   kill SIGUSR2 $(cat /var/run/udhcpc-eth0.200.pid)
+                   rm /var/run/udhcpc-eth0.200.pid
+                   ip link del eth0.200
+              fi
+        fi
         exit 1
     fi
 
