@@ -27,81 +27,12 @@
 #include <msgpack.h>
 
 /*----------------------------------------------------------------------------*/
-/*                                   Macros                                   */
-/*----------------------------------------------------------------------------*/
-/* none */
-#define match(p, s) strncmp((p)->key.via.str.ptr, s, (p)->key.via.str.size)
-#define member_size(type, member) sizeof(((type *)0)->member)
-
-/*----------------------------------------------------------------------------*/
-/*                               Data Structures                              */
-/*----------------------------------------------------------------------------*/
-typedef struct {
-    bool         mesh_enable;
-    bool         ethernetbackhaul_enable;
-    char         * subdoc_name;
-    uint32_t     version;
-    uint16_t     transaction_id;
-} meshbackhauldoc_t;
-
-enum {
-    HELPERS_OK = 0,
-    HELPERS_OUT_OF_MEMORY,
-    HELPERS_INVALID_FIRST_ELEMENT,
-    HELPERS_MISSING_WRAPPER
-};
-
-typedef int (*process_fn_t)(void *, int, ...);
-typedef void (*destroy_fn_t)(void *);
-
-/*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
-
-/**
- *  Simple helper function that decodes the msgpack, then checks for a few
- *  sanity items (including an optional wrapper map) before calling the process
- *  argument passed in.  This also allocates the structure for the caller.
- *
- *  @param buf          the buffer to decode
- *  @param len          the length of the buffer in bytes
- *  @param struct_size  the size of the structure to allocate and pass to process
- *  @param wrapper      the optional wrapper to look for & enforce
- *  @param expect_type  the type of object expected
- *  @param optional     if the inner wrapper layer is optional
- *  @param process      the process function to call if successful
- *  @param destroy      the destroy function to call if there was an error
- *
- *  @returns the object after process has done it's magic to it on success, or
- *           NULL on error
- */
-void* helper_convert( const void *buf, size_t len,
-                      size_t struct_size, const char *wrapper,
-                      msgpack_object_type expect_type, bool optional,
-                      process_fn_t process,
-                      destroy_fn_t destroy );
 
 size_t b64_decode( const uint8_t *input,
                       const size_t input_size,
                       uint8_t *output );
-
-/**
- *  This function converts a msgpack buffer into an meshbackhauldoc_t structure
- *  if possible.
- *
- *  @param buf the buffer to convert
- *  @param len the length of the buffer in bytes
- *
- *  @return NULL on error, success otherwise
- */
-meshbackhauldoc_t* meshbackhauldoc_convert( const void *buf, size_t len );
-
-/**
- *  This function destroys an meshbackhauldoc_t object.
- *
- *  @param e the meshbackhauldoc to destroy
- */
-void meshbackhauldoc_destroy( meshbackhauldoc_t *d );
 
 /**
  *  This function returns a general reason why the conversion failed.
@@ -111,5 +42,26 @@ void meshbackhauldoc_destroy( meshbackhauldoc_t *d );
  *  @return the constant string (do not alter or free) describing the error
  */
 const char* meshbackhauldoc_strerror( int errnum );
-
+void save_steering_profile_tofile(sp_doc_t *sp);
+void save_device_profile_tofile(dp_doc_t *dp);
+char *steering_profile_event_data_get();
+char *client_profile_event_data_get();
+void* blob_data_convert( const void *buf, size_t len,eBlobType blob_type );
+void meshbackhauldoc_destroy( void  *d );
+int process_meshdocparams( meshbackhauldoc_t *e, msgpack_object_map *map );
+int process_meshbackhauldoc( void *pm, int num, ...);
+void destroy_bs_sticky_11kvdoc(void *bs);
+void destroy_bs_11kvdoc(void *bs);
+void destroy_bsdoc(void *mb);
+void destroy_spsteeringdoc(void *mb);
+void destroy_dpdoc (void *db);
+void destroy_configsdoc (void *configs);
+int process_bs_sticky_11kvdoc (void *sticky_btm, int num ,...);
+int process_bs_gw_only_doc(void *gw, int num ,...);
+int process_bs_11kvdoc (void *bs,int num, ...);
+int process_bsdoc(void *bs,int num, ...);
+int process_spsteeringdoc( void *sp_default,int num, ... );
+int process_dpdoc( void  *data,int num, ... );
+int process_configsdoc( void  *data,int num, ... );
+void destroy_bs_gw_only_doc(void *gw);
 #endif

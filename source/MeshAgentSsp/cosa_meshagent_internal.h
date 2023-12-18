@@ -45,6 +45,8 @@ _COSA_DATAMODEL_MESHAGENT
     eWifiOptimizationMode       meshWifiOptimizationMode;
     UCHAR                       meshWifiOptMqttBroker[128];
     ULONG                       meshReinitPeriod;
+    BOOL                        meshSteeringProfileDefault;
+    BOOL                        meshClientProfileReceived;
 }
 COSA_DATAMODEL_MESHAGENT,  *PCOSA_DATAMODEL_MESHAGENT;
 

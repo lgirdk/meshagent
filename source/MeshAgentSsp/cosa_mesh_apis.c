@@ -64,7 +64,7 @@
 #ifdef MESH_OVSAGENT_ENABLE
 #include "OvsAgentApi.h"
 #endif
-
+#include "mesh_rbus.h"
 // TELEMETRY 2.0 //RDKB-26019
 #include <telemetry_busmessage_sender.h>
 
@@ -130,6 +130,8 @@ bool isXB3Platform = false;
 static bool s_SysEventHandler_ready = false;
 extern  ANSC_HANDLE             bus_handle;
 
+extern MeshRbusPublishEvent  meshRbusPublishEvent[];
+
 static pthread_t mq_server_tid; // server thread id
 static pthread_t lease_server_tid; // dnsmasq lease thread id
 int sysevent_fd;
@@ -159,29 +161,6 @@ extern char g_Subsystem[32];
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED)
 #define      RBUS_WAN_CURRENT_ACTIVE_INTERFACE "Device.X_RDK_WanManager.CurrentActiveInterface"
 #define      REMOTE_INTERFACE_NAME             "brRWAN"
-
-typedef enum
-{
-    MESH_RBUS_PUBLISH_WAN_LINK = 0,
-    MESH_RBUS_PUBLISH_BACKHAUL_IFNAME,
-    MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK,
-    MESH_RBUS_PUBLISH_EVENT_TOTAL
-} eMeshRbusPublishType;
-
-typedef struct _MeshRbusPublishEvent
-{
-   eMeshRbusPublishType eType;
-   char name[MAX_IFNAME_LEN];
-   rbus_type_t rbus_type;
-   unsigned int subflag;
-}MeshRbusPublishEvent;
-
-MeshRbusPublishEvent  meshRbusPublishEvent[] = {
-    {MESH_RBUS_PUBLISH_WAN_LINK,               EVENT_MESH_WAN_LINK,                  MESH_TYPE_BOOL,     0},
-    {MESH_RBUS_PUBLISH_BACKHAUL_IFNAME,        EVENT_MESH_BACKHAUL_IFNAME,           MESH_TYPE_STRING,   0},
-    {MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK,     EVENT_MESH_ETHERNETBHAUL_UPLINK,      MESH_TYPE_BOOL,     0}
-};
-
 #endif //WAN_FAILOVER_SUPPORTED
 #if !defined  RDKB_EXTENDER_ENABLED && defined(GATEWAY_FAILOVER_SUPPORTED)
 #define      RBUS_GATEWAY_PRESENT    "Device.X_RDK_GatewayManagement.ExternalGatewayPresent"
@@ -235,10 +214,10 @@ MeshRbusEvent  meshRbusEvent[] = {
     {MESH_RBUS_GATEWAY_PRESENT,                  RBUS_GATEWAY_PRESENT,                 false}
 #endif
 };
-rbusError_t publishRBUSEvent(eMeshRbusPublishType ptype, void *event_val);
 #endif
 
-rbusHandle_t handle;
+extern rbusHandle_t handle;
+
 #define      RBUS_SPEEDTEST_STATUS   "Device.IP.Diagnostics.X_RDKCENTRAL-COM_SpeedTest.Status"
 #define      RBUS_SPEEDTEST_TIMEOUT  "Device.IP.Diagnostics.X_RDK_SpeedTest.SubscriberUnPauseTimeOut"
 #define      ST_TR181_STATUS_STARTING 1
@@ -251,19 +230,22 @@ static char *meshWANIfname = NULL;
 static bool meshETHBhaulUplink = false;
 bool get_wan_bridge();
 bool get_eth_interface(char * eth_interface);
-
+#endif
 rbusError_t rbusGetStringHandler(rbusHandle_t handle, rbusProperty_t property, rbusGetHandlerOptions_t* opts);
 rbusError_t rbusGetBoolHandler(rbusHandle_t handle, rbusProperty_t property, rbusGetHandlerOptions_t* opts);
 rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action, const char* eventName, rbusFilter_t filter, int32_t interval, bool* autoPublish);
 
 rbusDataElement_t meshRbusDataElements[NUM_OF_RBUS_PARAMS] = {
-
-        {EVENT_MESH_WAN_LINK, RBUS_ELEMENT_TYPE_EVENT, {rbusGetBoolHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
+        {EVENT_MWO_TOS_CONFIGURATION, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
+        {EVENT_MWO_CLIENT_TO_PROFILE_MAP_EVENT, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}}
+#ifdef WAN_FAILOVER_SUPPORTED
+        ,{EVENT_MESH_WAN_LINK, RBUS_ELEMENT_TYPE_EVENT, {rbusGetBoolHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
         {EVENT_MESH_WAN_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, NULL, NULL}},
 	{EVENT_MESH_BACKHAUL_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
         {EVENT_MESH_ETHERNETBHAUL_UPLINK, RBUS_ELEMENT_TYPE_EVENT, {rbusGetBoolHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}}
-};
 #endif
+};
+
 #if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI) || defined(GATEWAY_FAILOVER_SUPPORTED)
 MeshStaStatus_node sta;
 #if defined(WAN_FAILOVER_SUPPORTED) && defined(RDKB_EXTENDER_ENABLED)
@@ -351,7 +333,10 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_GATEWAY_ENABLE,                   "MESH_GATEWAY_ENABLE",                  "mesh_switch_to_gateway"},
     {MESH_WIFI_OPT_MODE,                    "MESH_WIFI_OPT_MODE",                   "mesh_optimized_mode"},
     {MESH_WIFI_OPT_BROKER,                  "MESH_WIFI_OPT_BROKER",                 "mwo_mqtt_config"},
-    {MESH_WIFI_REINIT_PERIOD,               "MESH_WIFI_REINIT_PERIOD",              "hcm_reinit_period"}
+    {MESH_WIFI_REINIT_PERIOD,               "MESH_WIFI_REINIT_PERIOD",              "hcm_reinit_period"},
+    {MESH_OPT_ENABLE_MODE_BROKER_URL,       "MESH_OPT_ENABLE_MODE_BROKER_URL",      "offline_mqtt_broker"},
+    {MESH_OPT_ENABLE_MODE_BROKER_PORT,      "MESH_OPT_ENABLE_MODE_BROKER_PORT",     "offline_mqtt_port"},
+    {MESH_OPT_ENABLE_MODE_BROKER_TOPIC,     "MESH_OPT_ENABLE_MODE_BROKER_TOPIC",    "offline_mqtt_topic"}
 #ifdef ONEWIFI
     ,
     {MESH_SYNC_STATUS,                      "MESH_SYNC_STATUS",                     "mesh_led_status"},
@@ -917,10 +902,10 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
             MeshInfo("Ethernet bhaul disabled, ignoring the Pod mac update\n");
 
         Mesh_PodAddress( rxMsg.data.ethMac.mac, TRUE);
-        if((g_pMeshAgent->meshWifiOptimizationMode == MESH_MODE_MONITOR) && (eth_mac_count >0))
+        if((g_pMeshAgent->meshWifiOptimizationMode == MESH_MODE_MONITOR || g_pMeshAgent->meshWifiOptimizationMode == MESH_MODE_ENABLE) && (eth_mac_count >0))
         {
             Mesh_SetMeshWifiOptimizationMode(MESH_MODE_DISABLE, false, true);
-            MeshInfo("HCM Monitor Mode cant be configured if pod present, Changing rfc to Disabled\n");
+            MeshInfo("HCM Monitor/Enable Mode cant be configured if pod present, Changing rfc to Disabled\n");
         }
     }
     break;
@@ -949,7 +934,7 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     {
         MeshInfo("Received event MESH_BRHOME_IP %s\n", rxMsg.data.brhomeIP.ip);
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_BRHOME_IP].sysStr, rxMsg.data.brhomeIP.ip, 0, false);
-        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
+        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname,handle);
     }
     break;
     case MESH_ADD_DNSMASQ:
@@ -2909,64 +2894,6 @@ bool Mesh_ExtenderBridge(char *ifname)
     return status;
 }
 #endif
-#if defined(WAN_FAILOVER_SUPPORTED) || defined(ONEWIFI)
-/**
- * @brief Mesh publishRBUSEvent
- *
- * Publish event after event value gets updated
- */
-rbusError_t publishRBUSEvent(eMeshRbusPublishType ptype , void *val)
-{
-    rbusEvent_t event;
-    rbusObject_t data;
-    rbusValue_t value;
-    bool event_val;
-    rbusError_t ret = RBUS_ERROR_SUCCESS;
-
-    if(!meshRbusPublishEvent[ptype].subflag)
-    {
-        MeshInfo("No subscription for %s\n", meshRbusPublishEvent[ptype].name);
-        return RBUS_ERROR_NOSUBSCRIBERS;
-    }
-    //initialize and set new value for the event
-    rbusValue_Init(&value);
-
-    switch(meshRbusPublishEvent[ptype].rbus_type)
-    {
-    case MESH_TYPE_BOOL:
-        event_val = *((int  *)val) ?  true : false;
-	rbusValue_SetBoolean(value, event_val);
-    break;
-    case MESH_TYPE_STRING:
-        rbusValue_SetString(value, (char *)val);
-    break;
-    default:
-        MeshError("publishRBUSEvent default parameter\n");
-        break;
-    }
-
-    //initialize and set rbusObject with desired values
-    rbusObject_Init(&data, NULL);
-    rbusObject_SetValue(data, meshRbusPublishEvent[ptype].name, value);
-
-    //set data to be transferred
-    event.name = meshRbusPublishEvent[ptype].name;
-    event.data = data;
-    event.type = RBUS_EVENT_GENERAL;
-    //publish the event
-
-    ret = rbusEvent_Publish(handle, &event);
-    MeshInfo(
-        "rbusEvent_Publish for %s : %s action : %s\n",
-        CCSP_COMPONENT_ID, meshRbusPublishEvent[ptype].name,
-        ret == RBUS_ERROR_SUCCESS ? "sucess" : "failed" );
-
-    //release all initialized rbusValue objects
-    rbusValue_Release(value);
-    rbusObject_Release(data);
-    return ret;
-}
-#endif
 #if defined(WAN_FAILOVER_SUPPORTED)
 #define GRE_POST_HOOK   "/usr/sbin/gre-post-hook.sh"
 void monitor_wfo_state(bool bStatus)
@@ -3007,6 +2934,8 @@ void Send_MESH_WFO_ENABLED_Msg(bool bStatus)
     monitor_wfo_state(bStatus);
     return;
 }
+#endif
+
 /**
  * @brief Mesh rbusGetStringHandler
  *
@@ -3017,14 +2946,15 @@ rbusError_t rbusGetStringHandler(rbusHandle_t handle, rbusProperty_t property, r
     char const* name = rbusProperty_GetName(property);
     (void)handle;
     (void)opts;
-
+#ifdef WAN_FAILOVER_SUPPORTED
     bool rc = true;
+#endif
 
     MeshInfo("Called rbusGetStringHandler for [%s]\n",name);
 
     rbusValue_t value;
     rbusValue_Init(&value);
-
+#ifdef WAN_FAILOVER_SUPPORTED
     if (strcmp(name, EVENT_MESH_WAN_IFNAME) == 0 )
     {
         if (meshWANIfname == NULL)
@@ -3036,6 +2966,16 @@ rbusError_t rbusGetStringHandler(rbusHandle_t handle, rbusProperty_t property, r
     else if (strcmp(name, EVENT_MESH_BACKHAUL_IFNAME) == 0 )
     {
         rbusValue_SetString(value, mesh_backhaul_ifname);
+    }
+    else
+#endif
+    if(strcmp(name, EVENT_MWO_TOS_CONFIGURATION) == 0 )
+    {
+        rbusValue_SetString(value, g_pMeshAgent->meshSteeringProfileDefault?"Default Profile Updated":"Not Updated");
+    }
+    else if(strcmp(name, EVENT_MWO_CLIENT_TO_PROFILE_MAP_EVENT) == 0 )
+    {
+        rbusValue_SetString(value,g_pMeshAgent->meshClientProfileReceived?"Updated profile data":"Not Updated");
     }
     else
     {
@@ -3056,7 +2996,7 @@ rbusError_t rbusGetBoolHandler(rbusHandle_t handle, rbusProperty_t property, rbu
 
     rbusValue_t value;
     rbusValue_Init(&value);
-
+#ifdef WAN_FAILOVER_SUPPORTED
     if (strcmp(name, EVENT_MESH_WAN_LINK) == 0 )
     {
         rbusValue_SetBoolean(value, meshWANStatus);
@@ -3066,6 +3006,7 @@ rbusError_t rbusGetBoolHandler(rbusHandle_t handle, rbusProperty_t property, rbu
         rbusValue_SetBoolean(value, meshETHBhaulUplink);
     }
     else
+#endif
     {
         MeshError("Parameter not supported [%s]\n", name);
         rbusValue_Release(value);
@@ -3107,7 +3048,6 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
     return RBUS_ERROR_SUCCESS;
 }
 
-#endif
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED) || defined(GATEWAY_FAILOVER_SUPPORTED) || defined(RDKB_EXTENDER_ENABLED)
 void changeStaState(bool state)
 {
@@ -3135,7 +3075,6 @@ rbusError_t meshRbusInit()
         rc = RBUS_ERROR_NOT_INITIALIZED;
         return rc;
     }
-#if defined(WAN_FAILOVER_SUPPORTED)
     // Register data elements
     rc = rbus_regDataElements(handle, NUM_OF_RBUS_PARAMS, meshRbusDataElements);
 
@@ -3145,7 +3084,6 @@ rbusError_t meshRbusInit()
         rc = rbus_close(handle);
         return rc;
     }
-#endif
     return rc;
 }
 
@@ -3324,7 +3262,7 @@ void *uplinkHandleFunction()
 	    {
                 if (get_ipaddr_subnet(GATEWAY_FAILOVER_BRIDGE, local_ip, remote_ip))
                 {
-                    publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)GATEWAY_FAILOVER_BRIDGE);
+                    publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)GATEWAY_FAILOVER_BRIDGE,handle);
 		    snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", GATEWAY_FAILOVER_BRIDGE);
 		}
             }
@@ -3412,7 +3350,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
             if(ping_ip(MESH_BHAUL_INETADDR))
                 MeshInfo("Gateway Ip is reachable, still changing the device mode to gateway\n");
             snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
-            publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
+            publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname,handle);
         }
 	else
             snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_XLE_BRIDGE);
@@ -3422,7 +3360,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
             handle_led_status(MESH_CONTROLLER_CONNECTING, new_device_mode);
             meshETHBhaulUplink = false;
             MeshInfo("meshETHBhaulUplink: false when device_mode switch\n");
-            publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink);
+            publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink,handle);
             device_mode = new_device_mode;
             MeshInfo("Device Mode changed, Sending the notification to managers\n");
             Mesh_sendCurrentSta();
@@ -3481,7 +3419,7 @@ void rbusSubscribeHandler(rbusHandle_t handle, rbusEvent_t const* event, rbusEve
             handle_uplink_bridge(NULL, NULL, NULL, false);
             udhcpc_stop(sta.sta_ifname);
             udhcpc_stop(GATEWAY_FAILOVER_BRIDGE);
-	    publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE);
+	    publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE, handle);
 	    snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
 
 	    if (g_pMeshAgent->meshEnable)
@@ -3618,7 +3556,7 @@ void rbus_get_gw_present()
 
     if(rc != RBUS_ERROR_SUCCESS) {
         MeshInfo("gateway present rbus get failed");
-	publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE);
+	publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE, handle);
 	snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
         return;
     }
@@ -3637,7 +3575,7 @@ void rbus_get_gw_present()
     }
     else
     {
-        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE);
+        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)MESH_BHAUL_BRIDGE, handle);
         snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
     }
 }
@@ -3657,14 +3595,14 @@ void Mesh_backup_network(char *ifname, eMeshDeviceMode type, bool status)
         {
             meshETHBhaulUplink = false;
             MeshInfo("Eth : got disconnected: %s\n",ifname);
-            publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink);
+            publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink, handle);
             return;
         }
         else
         {
             meshETHBhaulUplink = is_eth_up;
             MeshInfo("%s : got connected: %s\n",(is_eth_up?"Eth":"Wi-Fi"),ifname);
-            publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink);
+            publishRBUSEvent(MESH_RBUS_PUBLISH_ETHBACKHAUL_UPLINK, (void *)&meshETHBhaulUplink, handle);
         }
     }
 
@@ -3684,7 +3622,7 @@ void Mesh_backup_network(char *ifname, eMeshDeviceMode type, bool status)
     {
         Mesh_SyseventSetStr(meshSyncMsgArr[MESH_BACKUP_NETWORK].sysStr, cmd, 0, false);
         connect = meshWANStatus ?  1 : 0;
-        publishRBUSEvent(MESH_RBUS_PUBLISH_WAN_LINK, (void *)&connect);
+        publishRBUSEvent(MESH_RBUS_PUBLISH_WAN_LINK, (void *)&connect,handle);
     }
     previous = meshWANStatus;
 }
@@ -3949,9 +3887,9 @@ bool Mesh_SetMeshWifiOptimizationMode(eWifiOptimizationMode uValue, bool init, b
 {
     int mode = uValue;
 
-    if((mode == MESH_MODE_MONITOR) && (eth_mac_count >0))
+    if((mode == MESH_MODE_MONITOR || mode == MESH_MODE_ENABLE) && (eth_mac_count >0))
     {
-        MeshInfo("HCM Monitor Mode cant be configured if pod present, Ignoring rfc change\n");
+        MeshInfo("HCM Monitor/Enable Mode cant be configured if pod present, Ignoring rfc change\n");
         return TRUE;
     }
 
@@ -7209,7 +7147,7 @@ static int Mesh_Init(ANSC_HANDLE hThisObject)
     if (device_mode == GATEWAY_MODE)
     {
         snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_BHAUL_BRIDGE);
-        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname);
+        publishRBUSEvent(MESH_RBUS_PUBLISH_BACKHAUL_IFNAME, (void *)mesh_backhaul_ifname,handle);
     }
     else
         snprintf(mesh_backhaul_ifname, MAX_IFNAME_LEN, "%s", MESH_XLE_BRIDGE);

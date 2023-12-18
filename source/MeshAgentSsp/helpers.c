@@ -21,13 +21,17 @@
 #include <string.h>
 #include <msgpack.h>
 #include "ccsp_trace.h"
-#include "helpers.h"
+#include "meshagent.h"
 #include "cosa_webconfig_api.h"
+#include "helpers.h"
+#include "safec_lib_common.h"
+#include <cjson/cJSON.h>
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
 /*----------------------------------------------------------------------------*/
-#define MB_ERROR                   -1 
-
+#define MB_ERROR                   -1
+#define STEERING_CONFIG_FILE       "/nvram/steering.json"
+#define DEVICE_CONFIG_FILE       "/nvram/device_profile.json"
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
@@ -36,7 +40,48 @@
 /*----------------------------------------------------------------------------*/
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
-//static const uint8_t cd64[]="|$$$}rstuvwxyz{$$$$$$$>?@ABCDEFGHIJKLMNOPQRSTUVW$$$$$$XYZ[\\]^_`abcdefghijklmnopq";
+
+meshblob_name_t  meshBlobNameArr[] = {
+    {MESH,                             "mesh"},
+    {STEERING_PROFILE_DEFAULT,         "meshsteeringprofiles"},
+    {DEVICE,                           "DeviceToSteeringProfile"},
+    {WIFI_CONFIG,                      "wificonfig_stat"},
+    {CONFIGS,                          "mwoconfigs"}
+};
+
+static c_item_t map_ovsdb_reject_detection[] = {
+    C_ITEM_STR(SP_CLIENT_REJECT_NONE,           "none"),
+    C_ITEM_STR(SP_CLIENT_REJECT_PROBE_ALL,      "probe_all"),
+    C_ITEM_STR(SP_CLIENT_REJECT_PROBE_NULL,     "probe_null"),
+    C_ITEM_STR(SP_CLIENT_REJECT_PROBE_DIRECT,   "probe_direct"),
+    C_ITEM_STR(SP_CLIENT_REJECT_AUTH_BLOCKED,   "auth_block")
+};
+
+static c_item_t map_ovsdb_kick_type[] = {
+    C_ITEM_STR(SP_CLIENT_KICK_NONE,             "none"),
+    C_ITEM_STR(SP_CLIENT_KICK_DISASSOC,         "disassoc"),
+    C_ITEM_STR(SP_CLIENT_KICK_DEAUTH,           "deauth"),
+    C_ITEM_STR(SP_CLIENT_KICK_BSS_TM_REQ,       "bss_tm_req"),
+    C_ITEM_STR(SP_CLIENT_KICK_RRM_BR_REQ,       "rrm_br_req"),
+    C_ITEM_STR(SP_CLIENT_KICK_BTM_DISASSOC,     "btm_disassoc"),
+    C_ITEM_STR(SP_CLIENT_KICK_BTM_DEAUTH,       "btm_deauth"),
+    C_ITEM_STR(SP_CLIENT_KICK_RRM_DISASSOC,     "rrm_disassoc"),
+    C_ITEM_STR(SP_CLIENT_KICK_RRM_DEAUTH,       "rrm_deauth")
+};
+
+static c_item_t map_ovsdb_pref_5g_allowed[] = {
+    C_ITEM_STR(SP_CLIENT_PREF_ALLOWED_NEVER,              "never" ),
+    C_ITEM_STR(SP_CLIENT_PREF_ALLOWED_HWM,                "hwm"   ),
+    C_ITEM_STR(SP_CLIENT_PREF_ALLOWED_ALWAYS,             "always"),
+    C_ITEM_STR(SP_CLIENT_PREF_ALLOWED_NON_DFS,            "nonDFS")
+};
+
+static c_item_t map_mwo_configs_type[] = {
+    C_ITEM_STR(TYPE_STRING,              "string" ),
+    C_ITEM_STR(TYPE_BOOLEAN,             "boolean"),
+    C_ITEM_STR(TYPE_INT,                 "int")
+};
+
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -44,11 +89,34 @@
 msgpack_object* __finder( const char *name, 
                           msgpack_object_type expect_type,
                           msgpack_object_map *map );
-int process_meshdocparams( meshbackhauldoc_t *e, msgpack_object_map *map );
-int process_meshbackhauldoc( meshbackhauldoc_t *pm, int num, ...);
+c_item_t * _c_get_item_by_str(c_item_t *list, int list_sz, const char *str);
+char * _c_get_str_by_key(c_item_t *list, int list_sz, int key);
+int process_bsparams( sp_defaultdoc_t *steer, msgpack_object_map *map, bool is_6g );
+int process_device_profile( DeviceSpecificProfiles_t *device, msgpack_object_array *array );
+typedef int (*process_fn_t)(void *, int, ...);
+typedef void (*destroy_fn_t)(void *);
+
 /*----------------------------------------------------------------------------*/
 /*                             External Functions                             */
 /*----------------------------------------------------------------------------*/
+/**
+ *  Simple helper function that decodes the msgpack, then checks for a few
+ *  sanity items (including an optional wrapper map) before calling the process
+ *  argument passed in.  This also allocates the structure for the caller.
+ *
+ *  @param buf          the buffer to decode
+ *  @param len          the length of the buffer in bytes
+ *  @param struct_size  the size of the structure to allocate and pass to process
+ *  @param wrapper      the optional wrapper to look for & enforce
+ *  @param expect_type  the type of object expected
+ *  @param optional     if the inner wrapper layer is optional
+ *  @param process      the process function to call if successful
+ *  @param destroy      the destroy function to call if there was an error
+ *
+ *  @returns the object after process has done it's magic to it on success, or
+ *           NULL on error
+ */
+
 void* helper_convert( const void *buf, size_t len,
                       size_t struct_size, const char *wrapper,
                       msgpack_object_type expect_type, bool optional,
@@ -64,7 +132,6 @@ void* helper_convert( const void *buf, size_t len,
     else
     {
         memset( p, 0, struct_size );
-
         if( NULL != buf && 0 < len )
         {
             size_t offset = 0;
@@ -75,7 +142,6 @@ void* helper_convert( const void *buf, size_t len,
 
             /* The outermost wrapper MUST be a map. */
             mp_rv = msgpack_unpack_next( &msg, (const char*) buf, len, &offset );
-
             if( (MSGPACK_UNPACK_SUCCESS == mp_rv) && (0 != offset) &&
                 (MSGPACK_OBJECT_MAP == msg.data.type) )
             {
@@ -83,30 +149,18 @@ void* helper_convert( const void *buf, size_t len,
                 msgpack_object *subdoc_name;
                 msgpack_object *version;
                 msgpack_object *transaction_id;
-
-                if( NULL != wrapper && 0 == strncmp(wrapper,"parameters",strlen("parameters")))
+                if( NULL != wrapper && 0 != strcmp(wrapper,"parameters"))
                 {
-                    inner = __finder( wrapper, expect_type, &msg.data.via.map );
-
-                    if( ((NULL != inner) && (0 == (process)(p, 1, inner))) ||
-                              ((true == optional) && (NULL == inner)) )
-                    {
-                         msgpack_unpacked_destroy( &msg );
-                         errno = HELPERS_OK;
-                         return p;
-                    }
+                    if(0 == strcmp(wrapper,"DeviceToSteeringProfile"))
+                        inner =  &msg.data.via.map.ptr->val;
+                    else if(0 == strcmp(wrapper,"mwoconfigs"))
+                        inner =  &msg.data.via.map.ptr->val;
                     else
-                    {
-                         errno = HELPERS_INVALID_FIRST_ELEMENT;
-                    }
-                }
-                else if( NULL != wrapper && 0 != strcmp(wrapper,"parameters"))
-                {
-                    inner = __finder( wrapper, expect_type, &msg.data.via.map );
+                        inner = __finder( wrapper, expect_type, &msg.data.via.map );
+
                     subdoc_name =  __finder( "subdoc_name", expect_type, &msg.data.via.map );
                     version =  __finder( "version", expect_type, &msg.data.via.map );
                     transaction_id =  __finder( "transaction_id", expect_type, &msg.data.via.map );
-
                     if( ((NULL != inner) && (0 == (process)(p,4, inner, subdoc_name, version, transaction_id))) ||
                               ((true == optional) && (NULL == inner)) )
                     {
@@ -119,7 +173,6 @@ void* helper_convert( const void *buf, size_t len,
                          errno = HELPERS_INVALID_FIRST_ELEMENT;
                     }
                 }
-
               }
             msgpack_unpacked_destroy( &msg );
             if(NULL!=p)
@@ -127,23 +180,507 @@ void* helper_convert( const void *buf, size_t len,
                (destroy)( p );
                 p = NULL;
             }
-
         }
     }
     return p;
 }
-/* See helper.h for details. */
-meshbackhauldoc_t* meshbackhauldoc_convert( const void *buf, size_t len )
+
+cJSON* create_clientSteering_object(DpClientSteering_t *client)
 {
-        return helper_convert( buf, len, sizeof(meshbackhauldoc_t), "mesh",
-                            MSGPACK_OBJECT_ARRAY, true,
-                           (process_fn_t) process_meshbackhauldoc,
-                           (destroy_fn_t) meshbackhauldoc_destroy );
+    if(client == NULL)
+    {
+        MeshInfo("%s:client is NULL\n",__FUNCTION__);
+    }
+    cJSON *clientSteering = cJSON_CreateObject();
+    // Add fields to clientSteering based on the id
+    if(client)
+    {
+        if(client->present_enable)
+            cJSON_AddBoolToObject(clientSteering, "enable",client->enable);
+        if(client->present_overrideDefault11kv)
+            cJSON_AddBoolToObject(clientSteering, "overrideDefault11kv",client->overrideDefault11kv);
+        if(client->present_retryTimeoutHours)
+            cJSON_AddNumberToObject(clientSteering, "retryTimeoutHours", client->retryTimeoutHours);
+        if(client->present_maxPoorThroughputCount)
+            cJSON_AddNumberToObject(clientSteering, "maxPoorThroughputCount",client->maxPoorThroughputCount );
+        if(client->present_kickType)
+            cJSON_AddStringToObject(clientSteering, "kickType", c_get_str_by_key(map_ovsdb_kick_type,client->kickType));
+        if(client->present_specKickType)
+            cJSON_AddStringToObject(clientSteering, "specKickType", c_get_str_by_key(map_ovsdb_kick_type,client->specKickType));
+        if(client->present_lwm2)
+            cJSON_AddNumberToObject(clientSteering, "lwm2",client->lwm2);
+        if(client->present_lwm3)
+            cJSON_AddNumberToObject(clientSteering, "lwm3", client->lwm3);
+        if(client->present_hwm2)
+            cJSON_AddNumberToObject(clientSteering, "hwm2", client->hwm2);
+        if(client->present_hwm3)
+            cJSON_AddNumberToObject(clientSteering, "hwm3", client->hwm3);
+        if(client->present_nss24GCap)
+            cJSON_AddNumberToObject(clientSteering, "nss24GCap", client->nss24GCap);
+        if(client->present_nss5GCap)
+            cJSON_AddNumberToObject(clientSteering, "nss5GCap", client->nss5GCap);
+        if(client->present_busyPpdusPerMinute)
+            cJSON_AddNumberToObject(clientSteering, "busyPpdusPerMinute", client->busyPpdusPerMinute);
+        if(client->present_busyOverrideProbeSnr)
+            cJSON_AddNumberToObject(clientSteering, "busyOverrideProbeSnr", client->busyOverrideProbeSnr);
+        if(client->present_busyOverrideThroughputMbps)
+            cJSON_AddNumberToObject(clientSteering, "busyOverrideThroughputMbps", client->busyOverrideThroughputMbps);
+        if(client->present_enforcePeriod)
+            cJSON_AddNumberToObject(clientSteering, "enforcePeriod", client->enforcePeriod);
+        if(client->present_maxRejects)
+            cJSON_AddNumberToObject(clientSteering, "maxRejects", client->maxRejects);
+    }
+    return clientSteering;
+}
+
+cJSON* create_bandSteering_object(DpBandSteering_t *steering)
+{
+ 
+    if(steering == NULL)
+    {
+        MeshInfo("%s:steering is NULL\n",__FUNCTION__);
+    }
+
+    cJSON *bandSteering = cJSON_CreateObject();
+
+    if(steering)
+    {
+        if(steering->present_enable)
+            cJSON_AddBoolToObject(bandSteering, "enable",steering->enable);
+        if(steering->present_kickUponIdleOnly)
+            cJSON_AddBoolToObject(bandSteering, "kickUponIdleOnly",steering->kickUponIdleOnly);
+        if(steering->present_preAssociationAuthBlock)
+            cJSON_AddBoolToObject(bandSteering, "preAssociationAuthBlock",steering->preAssociationAuthBlock);
+        if(steering->present_hwm)
+            cJSON_AddNumberToObject(bandSteering, "hwm",steering->hwm);
+        if(steering->present_lwm)
+            cJSON_AddNumberToObject(bandSteering, "lwm", steering->lwm);
+        if(steering->present_kickType)
+            cJSON_AddStringToObject(bandSteering, "kickType",c_get_str_by_key(map_ovsdb_kick_type,steering->kickType));
+        if(steering->present_stickyKickType)
+            cJSON_AddStringToObject(bandSteering, "stickyKickType",c_get_str_by_key(map_ovsdb_kick_type,steering->stickyKickType));
+        if(steering->present_gwOnly)
+        {
+            cJSON *gwOnly  = cJSON_CreateObject();
+            cJSON_AddItemToObject(bandSteering, "gwOnly", gwOnly);
+            cJSON_AddNumberToObject(gwOnly, "lwm",steering->gwOnly->lwm);
+        }
+    }
+    return bandSteering;
+}
+
+cJSON* create_bandSteering6G_object(DpBandSteering6G_t *dp_bs_6g)
+{
+    if(dp_bs_6g == NULL)
+    {
+        MeshInfo("%s:dp_bs_6g is NULL\n",__FUNCTION__);
+        return NULL;
+    }
+    cJSON *bandSteering6G = cJSON_CreateObject();
+
+    if(dp_bs_6g)
+    {
+        if (dp_bs_6g->present_hwm)
+            cJSON_AddNumberToObject(bandSteering6G, "hwm",dp_bs_6g->hwm);
+        if (dp_bs_6g->present_hwm2)
+            cJSON_AddNumberToObject(bandSteering6G, "hwm2", dp_bs_6g->hwm2);
+        if (dp_bs_6g->present_hwm3)
+            cJSON_AddNumberToObject(bandSteering6G, "hwm3", dp_bs_6g->hwm3);
+        if (dp_bs_6g->present_pref_5g)
+            cJSON_AddStringToObject(bandSteering6G, "preferred5g",c_get_str_by_key(map_ovsdb_pref_5g_allowed,dp_bs_6g->pref_5g));
+        if (dp_bs_6g->present_pref_6g)
+            cJSON_AddStringToObject(bandSteering6G, "preferred6g",c_get_str_by_key(map_ovsdb_pref_5g_allowed,dp_bs_6g->pref_6g));
+        if (dp_bs_6g->present_lwm)
+            cJSON_AddNumberToObject(bandSteering6G, "lwm", dp_bs_6g->lwm);
+        if (dp_bs_6g->present_lwm2)
+            cJSON_AddNumberToObject(bandSteering6G, "lwm2", dp_bs_6g->lwm2);
+        if (dp_bs_6g->present_lwm3)
+            cJSON_AddNumberToObject(bandSteering6G, "lwm3", dp_bs_6g->lwm3);
+        if (dp_bs_6g->present_maxRejects)
+            cJSON_AddNumberToObject(bandSteering6G, "maxRejects", dp_bs_6g->maxRejects);
+        if (dp_bs_6g->present_kickType)
+            cJSON_AddStringToObject(bandSteering6G, "kickType",c_get_str_by_key(map_ovsdb_kick_type,dp_bs_6g->kickType));
+        if (dp_bs_6g->present_stickyKickType)
+           cJSON_AddStringToObject(bandSteering6G, "stickyKickType",c_get_str_by_key(map_ovsdb_kick_type,dp_bs_6g->stickyKickType));
+        if(dp_bs_6g->present_gw_only_6g)
+        {
+            cJSON *gwOnlyOverlay  = cJSON_CreateObject();
+            cJSON_AddItemToObject(bandSteering6G, "gwOnlyOverlay", gwOnlyOverlay);
+            cJSON_AddStringToObject(gwOnlyOverlay, "preferred6g",c_get_str_by_key(map_ovsdb_pref_5g_allowed,dp_bs_6g->gw_only_6g->pref_6g));
+        }
+    }
+    return bandSteering6G;
+}
+
+cJSON* create_profile_object(clients_t    *clients)
+{
+    cJSON *profile = cJSON_CreateObject();
+    cJSON_AddStringToObject(profile, "mac_addr", clients->mac);
+    cJSON_AddNumberToObject(profile, "prof_id",clients->id);
+    return profile;
+}
+
+char *steering_profile_event_data_get()
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "event_type", "MWO_TOS_CONFIGURATION");
+    cJSON *event_data = cJSON_CreateObject();
+    cJSON_AddStringToObject(event_data, "message", "Default profile updated.");
+    cJSON_AddItemToObject(root, "event_data", event_data);
+    char *json_string = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return json_string;
+}
+
+char *client_profile_event_data_get()
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "event_type", "MWO_CLIENT_TO_PROFILE_MAP_EVENT");
+    cJSON *event_data = cJSON_CreateObject();
+    cJSON_AddStringToObject(event_data, "message", "Client mapping Updated");
+    cJSON_AddItemToObject(root, "event_data", event_data);
+    char *json_string = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return json_string;
+}
+
+void save_device_profile_tofile(dp_doc_t *dp)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON *clienttosteeringprofile = cJSON_CreateArray();
+
+    cJSON_AddItemToObject(root, "clienttosteeringprofile", clienttosteeringprofile);
+
+
+    for (int i = 0; i < dp->count; i++) {
+        cJSON_AddItemToArray(clienttosteeringprofile, create_profile_object((dp->clients+i)));
+    }
+    char *string = cJSON_PrintUnformatted(root);
+    FILE *file = fopen(DEVICE_CONFIG_FILE, "w");
+
+    if (file == NULL) {
+        MeshInfo("Error opening file!\n");
+        return ;
+    }
+
+    fprintf(file, "%s", string);
+
+    fclose(file);
+
+    free(string);
+    cJSON_Delete(root);
+}
+
+void save_steering_profile_tofile(sp_doc_t *sp)
+{
+    // Create JSON Objects
+    if(sp->sp_default == NULL)
+    {
+       MeshInfo("%s:sp_default is NULL\n",__FUNCTION__);
+       return;
+    }
+    if(sp->sp_default->band_steer == NULL)
+        MeshInfo("%s:band_steer is NULL\n",__FUNCTION__);
+    if(sp->sp_default->band_steer_6g == NULL)
+        MeshInfo("%s:band_steer is NULL\n",__FUNCTION__);
+    if(sp->sp_default->client_steering == NULL)
+        MeshInfo("%s:band_steer is NULL\n",__FUNCTION__);
+    if(sp->sp_default->dfs == NULL)
+        MeshInfo("%s:dfs is NULL\n",__FUNCTION__);
+    if(sp->device == NULL)
+        MeshInfo("%s:device is NULL\n",__FUNCTION__);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *meshsteeringprofiles = cJSON_CreateObject();
+    cJSON *steeringprofiledefaults = cJSON_CreateObject();
+    cJSON *bandSteering = cJSON_CreateObject();
+    cJSON *dot11vParamBandSteering = cJSON_CreateObject();
+    cJSON *dot11vParamStickyClientSteering = cJSON_CreateObject();
+    cJSON *gwOnlyOverlay = cJSON_CreateObject();
+
+    cJSON_AddItemToObject(root, "meshsteeringprofiles", meshsteeringprofiles);
+    cJSON_AddItemToObject(meshsteeringprofiles, "steeringprofiledefaults", steeringprofiledefaults);
+    cJSON_AddItemToObject(steeringprofiledefaults, "bandSteering", bandSteering);
+    if (sp->sp_default->band_steer)
+    {
+        cJSON_AddBoolToObject(bandSteering, "enable", sp->sp_default->band_steer->enable);
+        cJSON_AddNumberToObject(bandSteering, "backoffSeconds", sp->sp_default->band_steer->backoff_second);
+        cJSON_AddBoolToObject(bandSteering, "steerDuringBackoff", sp->sp_default->band_steer->steer_during_backoff);
+        cJSON_AddNumberToObject(bandSteering, "backoffExpBase", sp->sp_default->band_steer->backoff_exp_base);
+        cJSON_AddNumberToObject(bandSteering, "stickyKickGuardTime", sp->sp_default->band_steer->sticky_kick_guard_time);
+        cJSON_AddNumberToObject(bandSteering, "stickyKickBackoffTime", sp->sp_default->band_steer->sticky_kick_backoff_time);
+        cJSON_AddNumberToObject(bandSteering, "hwm", sp->sp_default->band_steer->hwm);
+        cJSON_AddNumberToObject(bandSteering, "kickReason",sp->sp_default->band_steer->kick_reason);
+        cJSON_AddStringToObject(bandSteering, "kickType", c_get_str_by_key(map_ovsdb_kick_type,sp->sp_default->band_steer->kick_type));
+        cJSON_AddNumberToObject(bandSteering, "stickyKickReason", sp->sp_default->band_steer->sticky_kick_reason);
+        cJSON_AddStringToObject(bandSteering, "stickyKickType", c_get_str_by_key(map_ovsdb_kick_type,sp->sp_default->band_steer->sticky_kick_type));
+        cJSON_AddStringToObject(bandSteering, "preferred5g", c_get_str_by_key(map_ovsdb_pref_5g_allowed,sp->sp_default->band_steer->pref_allowed));
+        cJSON_AddStringToObject(bandSteering, "preferred6g", c_get_str_by_key(map_ovsdb_pref_5g_allowed,sp->sp_default->band_steer->pref_6g));
+        cJSON_AddBoolToObject(bandSteering, "preAssociationAuthBlock", sp->sp_default->band_steer->pre_assoc_auth_block);
+        cJSON_AddNumberToObject(bandSteering, "lwm", sp->sp_default->band_steer->lwm);
+        cJSON_AddNumberToObject(bandSteering, "bottomLwm", sp->sp_default->band_steer->bottomLwm);
+        cJSON_AddNumberToObject(bandSteering, "maxRejects", sp->sp_default->band_steer->max_rejects);
+        cJSON_AddStringToObject(bandSteering, "rejectDetection", c_get_str_by_key(map_ovsdb_reject_detection,sp->sp_default->band_steer->reject_detection));
+        cJSON_AddNumberToObject(bandSteering, "rejectsTimeoutSeconds",sp->sp_default->band_steer->max_rejects_period);
+        cJSON_AddBoolToObject(bandSteering, "kickUponIdleOnly", sp->sp_default->band_steer->kick_upon_idle);
+        cJSON_AddNumberToObject(bandSteering, "kickDebouncePeriod", sp->sp_default->band_steer->kick_debounce_period);
+        cJSON_AddNumberToObject(bandSteering, "stickyKickDebouncePeriod", sp->sp_default->band_steer->sticky_kick_debounce_period);
+        cJSON_AddBoolToObject(bandSteering, "neighborListFilterByBeaconReport", sp->sp_default->band_steer->neighbor_list_filter_by_beacon_report);
+        cJSON_AddBoolToObject(bandSteering, "neighborListFilterByBTMStatus", sp->sp_default->band_steer->neighborListFilterByBTMStatus);
+        cJSON_AddNumberToObject(bandSteering, "btmMaxNeighbors", sp->sp_default->band_steer->btmMaxNeighbors);
+        cJSON_AddNumberToObject(bandSteering, "btmMaxNeighbors6g", sp->sp_default->band_steer->btmMaxNeighbors6g);
+
+        cJSON_AddItemToObject(bandSteering, "dot11vParamBandSteering", dot11vParamBandSteering);
+        if(sp->sp_default->band_steer->steering_btm_params)
+        {
+            cJSON_AddNumberToObject(dot11vParamBandSteering, "validityIntervalInTBTT",sp->sp_default->band_steer->steering_btm_params->valid_interval_tbtt);
+            cJSON_AddNumberToObject(dot11vParamBandSteering, "abridged", sp->sp_default->band_steer->steering_btm_params->abridged);
+            cJSON_AddNumberToObject(dot11vParamBandSteering, "preferred",sp->sp_default->band_steer->steering_btm_params->pref);
+            cJSON_AddNumberToObject(dot11vParamBandSteering, "disassociationImminent",sp->sp_default->band_steer->steering_btm_params->disassociation_imminent);
+            cJSON_AddNumberToObject(dot11vParamBandSteering, "bssTermination", sp->sp_default->band_steer->steering_btm_params->bss_termination);
+            cJSON_AddNumberToObject(dot11vParamBandSteering, "retryCount", sp->sp_default->band_steer->steering_btm_params->retry_count);
+            cJSON_AddNumberToObject(dot11vParamBandSteering, "retryInterval", sp->sp_default->band_steer->steering_btm_params->retry_interval);
+        }
+
+        cJSON_AddItemToObject(bandSteering, "dot11vParamStickyClientSteering", dot11vParamStickyClientSteering);
+        if(sp->sp_default->band_steer->sticky_btm_params)
+        {
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering, "validityIntervalInTBTT", sp->sp_default->band_steer->sticky_btm_params->valid_interval_tbtt);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering, "abridged", sp->sp_default->band_steer->sticky_btm_params->abridged);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering, "preferred", sp->sp_default->band_steer->sticky_btm_params->pref);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering, "disassociationImminent", sp->sp_default->band_steer->sticky_btm_params->disassociation_imminent);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering, "bssTermination", sp->sp_default->band_steer->sticky_btm_params->bss_termination);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering, "retryCount", sp->sp_default->band_steer->sticky_btm_params->retry_count);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering, "retryInterval", sp->sp_default->band_steer->sticky_btm_params->retry_interval);
+            cJSON_AddBoolToObject(dot11vParamStickyClientSteering, "includeNeighbors",sp->sp_default->band_steer->sticky_btm_params->include_neighbors);
+        }
+
+        cJSON_AddItemToObject(bandSteering, "gwOnlyOverlay", gwOnlyOverlay);
+        if(sp->sp_default->band_steer->for_gw_only)
+        {
+            cJSON_AddStringToObject(gwOnlyOverlay, "preferred5g", c_get_str_by_key(map_ovsdb_pref_5g_allowed,sp->sp_default->band_steer->for_gw_only->pref_5g));
+            cJSON_AddNumberToObject(gwOnlyOverlay, "lwm", sp->sp_default->band_steer->for_gw_only->lwm);
+        }
+    }
+
+    cJSON *bandSteering6G = cJSON_CreateObject();
+    cJSON *dot11vParamBandSteering_6g = cJSON_CreateObject();
+    cJSON *dot11vParamStickyClientSteering_6g = cJSON_CreateObject();
+    cJSON *gwOnlyOverlay_6g = cJSON_CreateObject();
+
+    cJSON_AddItemToObject(steeringprofiledefaults, "bandSteering6G", bandSteering6G);
+    if (sp->sp_default->band_steer_6g)
+    {
+        cJSON_AddBoolToObject(bandSteering6G, "enable", sp->sp_default->band_steer_6g->enable);
+        cJSON_AddNumberToObject(bandSteering6G, "backoffSeconds",sp->sp_default->band_steer_6g->backoff_second);
+        cJSON_AddBoolToObject(bandSteering6G, "steerDuringBackoff", sp->sp_default->band_steer_6g->steer_during_backoff);
+        cJSON_AddNumberToObject(bandSteering6G, "backoffExpBase", sp->sp_default->band_steer_6g->backoff_exp_base);
+        cJSON_AddNumberToObject(bandSteering6G, "stickyKickGuardTime", sp->sp_default->band_steer_6g->sticky_kick_guard_time);
+        if (sp->sp_default->band_steer_6g->band_steering_6g)
+            cJSON_AddNumberToObject(bandSteering6G, "steeringKickBackOffTime", sp->sp_default->band_steer_6g->band_steering_6g->steerDuringBackoff);
+        cJSON_AddNumberToObject(bandSteering6G, "stickyKickBackoffTime", sp->sp_default->band_steer_6g->sticky_kick_backoff_time);
+        cJSON_AddNumberToObject(bandSteering6G, "hwm",sp->sp_default->band_steer_6g->hwm );
+        cJSON_AddNumberToObject(bandSteering6G, "hwm2", sp->sp_default->band_steer_6g->band_steering_6g->hwm2);
+        cJSON_AddNumberToObject(bandSteering6G, "hwm3", sp->sp_default->band_steer_6g->band_steering_6g->hwm3);
+        cJSON_AddNumberToObject(bandSteering6G, "kickReason", sp->sp_default->band_steer_6g->kick_reason);
+        cJSON_AddStringToObject(bandSteering6G, "kickType", c_get_str_by_key(map_ovsdb_kick_type,sp->sp_default->band_steer_6g->kick_type));
+        cJSON_AddNumberToObject(bandSteering6G, "stickyKickReason", sp->sp_default->band_steer_6g->sticky_kick_reason);
+        cJSON_AddStringToObject(bandSteering6G, "stickyKickType", c_get_str_by_key(map_ovsdb_kick_type,sp->sp_default->band_steer_6g->sticky_kick_type));
+        cJSON_AddStringToObject(bandSteering6G, "preferred5g", c_get_str_by_key(map_ovsdb_pref_5g_allowed,sp->sp_default->band_steer_6g->pref_allowed));
+        cJSON_AddStringToObject(bandSteering6G, "preferred6g",c_get_str_by_key(map_ovsdb_pref_5g_allowed,sp->sp_default->band_steer_6g->pref_6g));
+        cJSON_AddBoolToObject(bandSteering6G, "preAssociationAuthBlock",sp->sp_default->band_steer_6g->pre_assoc_auth_block);
+        cJSON_AddNumberToObject(bandSteering6G, "lwm", sp->sp_default->band_steer_6g->lwm);
+        cJSON_AddNumberToObject(bandSteering6G, "lwm2", sp->sp_default->band_steer_6g->band_steering_6g->lwm2);
+        cJSON_AddNumberToObject(bandSteering6G, "lwm3", sp->sp_default->band_steer_6g->band_steering_6g->lwm3);
+        cJSON_AddNumberToObject(bandSteering6G, "bottomLwm", sp->sp_default->band_steer_6g->bottomLwm);
+        cJSON_AddNumberToObject(bandSteering6G, "maxRejects", sp->sp_default->band_steer_6g->max_rejects);
+        cJSON_AddStringToObject(bandSteering6G, "rejectDetection", c_get_str_by_key(map_ovsdb_reject_detection,sp->sp_default->band_steer_6g->reject_detection));
+        cJSON_AddNumberToObject(bandSteering6G, "rejectsTimeoutSeconds",sp->sp_default->band_steer_6g->max_rejects_period);
+        cJSON_AddBoolToObject(bandSteering6G, "kickUponIdleOnly", sp->sp_default->band_steer_6g->kick_upon_idle);
+        cJSON_AddNumberToObject(bandSteering6G, "kickDebouncePeriod", sp->sp_default->band_steer_6g->kick_debounce_period);
+        cJSON_AddNumberToObject(bandSteering6G, "stickyKickDebouncePeriod", sp->sp_default->band_steer_6g->sticky_kick_debounce_period);
+        cJSON_AddBoolToObject(bandSteering6G, "neighborListFilterByBeaconReport", sp->sp_default->band_steer_6g->neighbor_list_filter_by_beacon_report);
+        cJSON_AddBoolToObject(bandSteering6G, "neighborListFilterByBTMStatus",sp->sp_default->band_steer_6g->neighborListFilterByBTMStatus);
+        cJSON_AddNumberToObject(bandSteering6G, "btmMaxNeighbors", sp->sp_default->band_steer_6g->btmMaxNeighbors);
+        cJSON_AddNumberToObject(bandSteering6G, "btmMaxNeighbors6g", sp->sp_default->band_steer_6g->btmMaxNeighbors6g);
+
+        cJSON_AddItemToObject(bandSteering6G, "dot11vParamBandSteering", dot11vParamBandSteering_6g);
+        if(sp->sp_default->band_steer_6g->steering_btm_params)
+        {
+            cJSON_AddNumberToObject(dot11vParamBandSteering_6g, "validityIntervalInTBTT",sp->sp_default->band_steer_6g->steering_btm_params->valid_interval_tbtt);
+            cJSON_AddNumberToObject(dot11vParamBandSteering_6g, "abridged", sp->sp_default->band_steer_6g->steering_btm_params->abridged);
+            cJSON_AddNumberToObject(dot11vParamBandSteering_6g, "preferred", sp->sp_default->band_steer_6g->steering_btm_params->pref);
+            cJSON_AddNumberToObject(dot11vParamBandSteering_6g, "disassociationImminent",sp->sp_default->band_steer_6g->steering_btm_params->disassociation_imminent);
+            cJSON_AddNumberToObject(dot11vParamBandSteering_6g, "bssTermination",sp->sp_default->band_steer_6g->steering_btm_params->bss_termination);
+            cJSON_AddNumberToObject(dot11vParamBandSteering_6g, "retryCount", sp->sp_default->band_steer_6g->steering_btm_params->retry_count);
+            cJSON_AddNumberToObject(dot11vParamBandSteering_6g, "retryInterval", sp->sp_default->band_steer_6g->steering_btm_params->retry_interval);
+        }
+
+        cJSON_AddItemToObject(bandSteering6G, "dot11vParamStickyClientSteering", dot11vParamStickyClientSteering_6g);
+        if(sp->sp_default->band_steer_6g->sticky_btm_params)
+        {
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering_6g, "validityIntervalInTBTT",sp->sp_default->band_steer_6g->sticky_btm_params->valid_interval_tbtt);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering_6g, "abridged", sp->sp_default->band_steer_6g->sticky_btm_params->abridged);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering_6g, "preferred", sp->sp_default->band_steer_6g->sticky_btm_params->pref);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering_6g, "disassociationImminent",sp->sp_default->band_steer_6g->sticky_btm_params->disassociation_imminent);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering_6g, "bssTermination",sp->sp_default->band_steer_6g->sticky_btm_params->bss_termination);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering_6g, "retryCount", sp->sp_default->band_steer_6g->sticky_btm_params->retry_count);
+            cJSON_AddNumberToObject(dot11vParamStickyClientSteering_6g, "retryInterval", sp->sp_default->band_steer_6g->sticky_btm_params->retry_interval);
+            cJSON_AddBoolToObject(dot11vParamStickyClientSteering_6g, "includeNeighbors",sp->sp_default->band_steer_6g->sticky_btm_params->include_neighbors);
+        }
+
+        cJSON_AddItemToObject(bandSteering6G, "gwOnlyOverlay", gwOnlyOverlay_6g);
+        if(sp->sp_default->band_steer_6g->for_gw_only)
+        {
+            cJSON_AddStringToObject(gwOnlyOverlay_6g, "preferred5g", c_get_str_by_key(map_ovsdb_pref_5g_allowed,sp->sp_default->band_steer_6g->for_gw_only->pref_5g));
+            if(sp->sp_default->band_steer_6g->for_gw_only->gw_only_6g)
+                cJSON_AddStringToObject(gwOnlyOverlay_6g, "preferred6g",c_get_str_by_key(map_ovsdb_pref_5g_allowed,sp->sp_default->band_steer_6g->for_gw_only->gw_only_6g->pref_6g));
+            cJSON_AddNumberToObject(gwOnlyOverlay_6g, "lwm", sp->sp_default->band_steer_6g->for_gw_only->lwm);
+            if(sp->sp_default->band_steer_6g->for_gw_only->gw_only_6g)
+                cJSON_AddNumberToObject(gwOnlyOverlay_6g, "hwm", sp->sp_default->band_steer_6g->for_gw_only->gw_only_6g->hwm);
+        }
+    }
+
+    cJSON *clientSteering = cJSON_CreateObject();
+    cJSON *dot11vParamDirectedSteering = cJSON_CreateObject();
+    cJSON *dfs = cJSON_CreateObject();
+    // Construct meshsteeringprofiles structure
+    cJSON_AddItemToObject(steeringprofiledefaults, "clientSteering", clientSteering);
+    cJSON_AddItemToObject(steeringprofiledefaults, "dfs", dfs);
+
+    if(sp->sp_default->client_steering)
+    {
+        cJSON_AddBoolToObject(clientSteering, "enable",sp->sp_default->client_steering->enable);
+        cJSON_AddBoolToObject(clientSteering, "overrideDefault11kv",sp->sp_default->client_steering->override_default_11kv);
+        cJSON_AddNumberToObject(clientSteering, "backoffSeconds", sp->sp_default->client_steering->backoff_seconds);
+        cJSON_AddNumberToObject(clientSteering, "maxKicksInHour", sp->sp_default->client_steering->max_kicks_in_hour);
+        cJSON_AddNumberToObject(clientSteering, "busyThresholdMbps",sp->sp_default->client_steering->busy_threshold_mbps);
+        cJSON_AddNumberToObject(clientSteering, "maxPoorThroughputCount", sp->sp_default->client_steering->max_poor_throughput_count);
+        cJSON_AddNumberToObject(clientSteering, "throughputChangeMbps", sp->sp_default->client_steering->tp_change_mbps);
+        cJSON_AddNumberToObject(clientSteering, "throughputImprovementPct", sp->sp_default->client_steering->tp_improvement_pct);
+        cJSON_AddNumberToObject(clientSteering, "throughputChangeMbps2gOnly", sp->sp_default->client_steering->tp_change_mbps_2g_only);
+        cJSON_AddNumberToObject(clientSteering, "throughputImprovementPct2gOnly",sp->sp_default->client_steering->tp_improvement_pct_2g_only);
+        cJSON_AddNumberToObject(clientSteering, "throughputChangeMbpsDownsteer",sp->sp_default->client_steering->tp_change_mbps_downsteer);
+        cJSON_AddNumberToObject(clientSteering, "throughputImprovementPctDownsteer",sp->sp_default->client_steering->tp_improvement_pct_downsteer);
+        cJSON_AddNumberToObject(clientSteering, "throughputChangeMbps5gTo6g",sp->sp_default->client_steering->tp_change_mbps_5g_to_6g);
+        cJSON_AddNumberToObject(clientSteering, "throughputImprovementPct5gTo6g",sp->sp_default->client_steering->tp_improvement_pct_5g_to_6g);
+        cJSON_AddNumberToObject(clientSteering, "throughputChangeMbps6gTo5g", sp->sp_default->client_steering->tp_change_mbps_6g_to_5g);
+        cJSON_AddNumberToObject(clientSteering, "throughputImprovementPct6gTo5g",sp->sp_default->client_steering->tp_improvement_pct_6g_to_5g);
+        cJSON_AddNumberToObject(clientSteering, "kickReason", sp->sp_default->client_steering->kick_reason);
+        cJSON_AddStringToObject(clientSteering, "kickType", c_get_str_by_key(map_ovsdb_kick_type,sp->sp_default->client_steering->kick_type));
+        cJSON_AddStringToObject(clientSteering, "specKickType", c_get_str_by_key(map_ovsdb_kick_type,sp->sp_default->client_steering->spec_kick_type));
+        cJSON_AddNumberToObject(clientSteering, "lwm",sp->sp_default->client_steering->lwm);
+        cJSON_AddNumberToObject(clientSteering, "lwm_6g",sp->sp_default->client_steering->lwm_6g);
+        cJSON_AddNumberToObject(clientSteering, "hwm",sp->sp_default->client_steering->hwm);
+        cJSON_AddBoolToObject(clientSteering, "authBlock", sp->sp_default->client_steering->auth_block);
+        cJSON_AddBoolToObject(clientSteering, "probeBlock",sp->sp_default->client_steering->probe_block);
+        cJSON_AddNumberToObject(clientSteering, "authRejectReason",sp->sp_default->client_steering->auth_reject_reason);
+        cJSON_AddNumberToObject(clientSteering, "maxRejects",sp->sp_default->client_steering->max_rejects);
+        cJSON_AddStringToObject(clientSteering, "rejectDetection", c_get_str_by_key(map_ovsdb_reject_detection,sp->sp_default->client_steering->reject_detection));
+        cJSON_AddNumberToObject(clientSteering, "maxRejectsPeriod", sp->sp_default->client_steering->max_rejects_period);
+        cJSON_AddNumberToObject(clientSteering, "recoveryPeriod", sp->sp_default->client_steering->recovery_period);
+        cJSON_AddNumberToObject(clientSteering, "enforcePeriod", sp->sp_default->client_steering->enforce_period);
+        cJSON_AddNumberToObject(clientSteering, "scKickDebouncePeriod", sp->sp_default->client_steering->sc_kick_debounce_period);
+
+        cJSON_AddItemToObject(clientSteering, "dot11vParamDirectedSteering", dot11vParamDirectedSteering);
+        if(sp->sp_default->client_steering->kv_params_direct)
+        {
+            cJSON_AddNumberToObject(dot11vParamDirectedSteering, "validityIntervalInTBTT", sp->sp_default->client_steering->kv_params_direct->valid_interval_tbtt);
+            cJSON_AddNumberToObject(dot11vParamDirectedSteering, "abridged", sp->sp_default->client_steering->kv_params_direct->abridged);
+            cJSON_AddNumberToObject(dot11vParamDirectedSteering, "preferred", sp->sp_default->client_steering->kv_params_direct->pref);
+            cJSON_AddNumberToObject(dot11vParamDirectedSteering, "disassociationImminent", sp->sp_default->client_steering->kv_params_direct->disassociation_imminent);
+            cJSON_AddNumberToObject(dot11vParamDirectedSteering, "bssTermination", sp->sp_default->client_steering->kv_params_direct->bss_termination);
+            cJSON_AddNumberToObject(dot11vParamDirectedSteering, "retryCount", sp->sp_default->client_steering->kv_params_direct->retry_count);
+            cJSON_AddNumberToObject(dot11vParamDirectedSteering, "retryInterval", sp->sp_default->client_steering->kv_params_direct->retry_interval);
+        }
+    }
+
+    if(sp->sp_default->dfs)
+        cJSON_AddBoolToObject(dfs, "supported", sp->sp_default->dfs->is_supported);
+
+    cJSON *devicespecificprofiles = cJSON_CreateArray();
+    cJSON_AddItemToObject(meshsteeringprofiles, "devicespecificprofiles", devicespecificprofiles);
+    if(sp->device)
+    {
+        for (int i = 0; i < 15; i++)
+        {
+            cJSON *profile = cJSON_CreateObject();
+            cJSON_AddItemToArray(devicespecificprofiles, profile);
+            cJSON_AddStringToObject(profile, "description", sp->device->profiles[i].description);
+            cJSON_AddNumberToObject(profile, "id", i);
+            if(sp->device->profiles[i].present_bandSteering)
+                cJSON_AddItemToObject(profile, "bandSteering", create_bandSteering_object(sp->device->profiles[i].bandSteering));
+            if(sp->device->profiles[i].present_bandSteering6g)
+                cJSON_AddItemToObject(profile, "bandSteering6G", create_bandSteering6G_object(sp->device->profiles[i].bandSteering6g));
+            if(sp->device->profiles[i].present_clientSteering)
+                cJSON_AddItemToObject(profile, "clientSteering", create_clientSteering_object(sp->device->profiles[i].clientSteering));
+        }
+    }
+    char *string = cJSON_PrintUnformatted(root);
+
+    MeshInfo("%s\n", string);
+
+    FILE *file = fopen(STEERING_CONFIG_FILE, "w");
+
+    if (file == NULL) {
+        MeshInfo("%s: Error in opening file: %s\n",__FUNCTION__,STEERING_CONFIG_FILE);
+        return;
+    }
+
+    // Write the string to the file
+    fprintf(file, "%s", string);
+
+    // Close the file
+    fclose(file);
+
+    // Free memory
+    free(string);
+    cJSON_Delete(root);
+
 }
 
 /* See helper.h for details. */
-void meshbackhauldoc_destroy( meshbackhauldoc_t *mb )
+void* blob_data_convert( const void *buf, size_t len, eBlobType blob_type )
 {
+    int blob_size = 0;
+    process_fn_t process = NULL;
+    destroy_fn_t destroy = NULL;
+
+    switch(blob_type)
+    {
+        case MESH:
+            blob_size = sizeof(meshbackhauldoc_t);
+            process = process_meshbackhauldoc;
+            destroy = meshbackhauldoc_destroy;
+        break;
+        case STEERING_PROFILE_DEFAULT:
+            blob_size = sizeof(sp_doc_t);
+            process = process_spsteeringdoc;
+            destroy = destroy_spsteeringdoc;
+        break;
+        case DEVICE:
+            blob_size = sizeof(dp_doc_t);
+            process = process_dpdoc;
+            destroy = destroy_dpdoc;
+        break;
+        case CONFIGS:
+            blob_size = sizeof(configs_doc_t);
+            process = process_configsdoc;
+            destroy = destroy_configsdoc;
+        break;
+        default:
+        break;
+    }
+    return helper_convert( buf, len, blob_size, meshBlobNameArr[blob_type].blob_name_str,
+                            MSGPACK_OBJECT_ARRAY, true,
+                           (process_fn_t) process,
+                           (destroy_fn_t) destroy );
+}
+
+/* See helper.h for details. */
+void meshbackhauldoc_destroy( void *data )
+{
+     meshbackhauldoc_t *mb = ( meshbackhauldoc_t *) data;
     if( NULL != mb )
     {
         if( NULL != mb->subdoc_name )
@@ -242,18 +779,18 @@ int process_meshdocparams ( meshbackhauldoc_t *mb, msgpack_object_map *mapobj )
     {
         if( MSGPACK_OBJECT_STR == p->key.type )
         {
-              if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
-              {
-                  if( 0 == match(p, "Enable") )
-                  {
-                      mb->mesh_enable = p->val.via.boolean;
-                      objects_left &= ~(1 << 0);
-                  }
-                  if( 0 == match(p, "Ethbhaul") )
-                  {
-                      mb->ethernetbackhaul_enable = p->val.via.boolean;
-                      objects_left &= ~(1 << 1);
-                  }
+            if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
+            {
+                if( 0 == match(p, "Enable") )
+                {
+                    mb->mesh_enable = p->val.via.boolean;
+                    objects_left &= ~(1 << 0);
+                }
+                if( 0 == match(p, "Ethbhaul") )
+                {
+                    mb->ethernetbackhaul_enable = p->val.via.boolean;
+                    objects_left &= ~(1 << 1);
+                }
               }
         }
         p++;
@@ -267,11 +804,12 @@ int process_meshdocparams ( meshbackhauldoc_t *mb, msgpack_object_map *mapobj )
     return (0 == objects_left) ? 0 : -1;
 }
 
-int process_meshbackhauldoc( meshbackhauldoc_t *mb,int num, ... )
+int process_meshbackhauldoc(void *data,int num, ... )
 {
     va_list valist;
-    va_start(valist, num);
+    meshbackhauldoc_t * mb = (meshbackhauldoc_t *)data;
 
+    va_start(valist, num);
 
     msgpack_object *obj = va_arg(valist, msgpack_object *);
     msgpack_object_map *mapobj = &obj->via.map;
@@ -290,6 +828,1754 @@ int process_meshbackhauldoc( meshbackhauldoc_t *mb,int num, ... )
     {
         return -1;
     }
+    return 0;
+}
 
+int process_dp_steering_gwonly(DpGwOnlyOverlay *gw,msgpack_object_map *map)
+{
+    int left = map->size;
+    msgpack_object_kv *p;
+    p = map->ptr;
+
+    while( (0 < left--))
+    {   
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {   
+            if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {
+                if( 0 == match(p, "lwm") )
+                 {
+                     gw->lwm = (int) p->val.via.u64;
+                 }
+            }
+        }
+        p++;
+    }
+    return 0;
+}
+
+int process_dp_steering_6g_gwonly(DpGwOnlyOverlay6g *gw_6g,msgpack_object_map *map)
+{
+    int left = map->size;
+    msgpack_object_kv *p;
+    c_item_t          *item;
+    char *val;
+    p = map->ptr;
+
+    while( (0 < left--))
+    {   
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+            if( 0 == match(p, "preferred6g") )
+            {
+                val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                if (!item) {
+                    MeshError("Unknown preferred 6g %s",val);
+                }
+                gw_6g->pref_6g  = (sp_client_pref_allowed)item->key;
+                free(val);
+            }   
+        }
+        p++;
+    }
+    return 0;
+}
+
+int process_dp_bandsteering(DpBandSteering_t *dp_steer, msgpack_object_map *map)
+{
+    int left = map->size;
+    msgpack_object_kv *p;
+    c_item_t          *item;
+    char *val;
+
+    MeshInfo("process_dp_bandsteering : size = %d\n",left);
+    p = map->ptr;
+    while((0 < left--) )
+    {   
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+            if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
+            {
+                 if( 0 == match(p, "preAssociationAuthBlock") )
+                 {
+                     dp_steer->present_preAssociationAuthBlock = true;
+                     dp_steer->preAssociationAuthBlock = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "enable") )
+                 {
+                     dp_steer->present_enable = true;
+                     dp_steer->enable = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "kickUponIdleOnly") )
+                 {
+                     dp_steer->present_kickUponIdleOnly = true;
+                     dp_steer->kickUponIdleOnly = p->val.via.boolean;
+                 }
+
+            }
+            if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {
+                 if( 0 == match(p, "hwm") )
+                 {
+                     dp_steer->present_hwm = true;
+                     dp_steer->hwm = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "lwm") )
+                 {
+                     dp_steer->present_lwm = true;
+                     dp_steer->lwm = (int) p->val.via.u64;
+                 }
+                 else
+                     MeshError("process_bs_11kv_params failed\n");
+            }
+            else if(MSGPACK_OBJECT_STR == p->val.type)
+            {   
+                if( 0 == match(p, "kickType") )
+                {
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                    if (!item) {
+                        MeshError("Unknown kick type %s",val);
+                    }
+                    dp_steer->present_kickType = true;
+                    dp_steer->kickType  = (sp_client_kick_t)item->key;
+                    if(val)
+                        free(val);
+                }
+                if( 0 == match(p, "stickyKickType") )
+                {
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                    if (!item) {
+                        MeshError("Unknown kick type %s",val);
+                    }
+                    dp_steer->present_stickyKickType = true;
+                    dp_steer->stickyKickType  = (sp_client_kick_t)item->key;
+                    if(val)
+                        free(val);
+                }
+            }
+            else if( MSGPACK_OBJECT_MAP  == p->val.type )
+            {   
+                if( 0 == match(p, "gwOnlyOverlay"))
+                {
+                    dp_steer->gwOnly = malloc( sizeof(DpGwOnlyOverlay));
+                    memset(dp_steer->gwOnly, 0, sizeof(DpGwOnlyOverlay));
+                    dp_steer->present_gwOnly = true;
+                    process_dp_steering_gwonly(dp_steer->gwOnly, &p->val.via.map);
+                }
+            }
+            else
+                MeshError("process_dp_bandsteering invalid type\n");
+        p++;
+        }
+    }
+    return 0;
+}
+
+int process_dp_bandsteering6g(DpBandSteering6G_t *dp_steer6g, msgpack_object_map *map)
+{
+    int left = map->size;
+    msgpack_object_kv *p;
+    c_item_t          *item;
+    char *val;
+    MeshInfo("process_dp_bandsteering6g size = %d\n",left);
+    p = map->ptr;
+    while((0 < left--) )
+    {   
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {   
+            if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {
+                 if( 0 == match(p, "maxRejects") )
+                 {
+                     dp_steer6g->present_maxRejects = true;
+                     dp_steer6g->maxRejects = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "hwm") )
+                 {
+                     dp_steer6g->present_hwm = true;
+                     dp_steer6g->hwm = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "hwm2") )
+                 {
+                     dp_steer6g->present_hwm2 = true;
+                     dp_steer6g->hwm2 = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "hwm3") )
+                 {
+                     dp_steer6g->present_hwm3 = true;
+                     dp_steer6g->hwm3 = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "lwm") )
+                 {
+                     dp_steer6g->present_lwm = true;
+                     dp_steer6g->lwm = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "lwm2") )
+                 {
+                     dp_steer6g->present_lwm2 = true;
+                     dp_steer6g->lwm2 = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "lwm3") )
+                 {
+                     dp_steer6g->present_lwm3 = true;
+                     dp_steer6g->lwm3 = (int) p->val.via.u64;
+                 }
+                 else
+                     MeshError("process_bs_11kv_params failed\n");
+            }
+            else if(MSGPACK_OBJECT_STR == p->val.type)
+            {
+                if( 0 == match(p, "kickType") )
+                {
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                    if (!item) {
+                        MeshError("Unknown kick type %s",val);
+                    }
+                    dp_steer6g->present_kickType = true;
+                    dp_steer6g->kickType  = (sp_client_kick_t)item->key;
+                    if(val)
+                        free(val);
+                }
+                if( 0 == match(p, "stickyKickType") )
+                {
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                    if (!item) {
+                        MeshError("Unknown kick type %s",val);
+                    }
+                    dp_steer6g->present_stickyKickType = true;
+                    dp_steer6g->stickyKickType  = (sp_client_kick_t)item->key;
+                    if(val)
+                        free(val);
+                }
+                if( 0 == match(p, "preferred5g") )
+                {   
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                     if (!item) {
+                         MeshError("Unknown preferred 5g %s",val);
+                     }
+                     dp_steer6g->present_pref_5g  = true;
+                     dp_steer6g->pref_5g  = (sp_client_pref_allowed)item->key;
+                     free(val);
+                 }
+                 else if( 0 == match(p, "preferred6g") )
+                 {   
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                     if (!item) {
+                         MeshError("Unknown preferred 6g %s",val);
+                     }
+                     dp_steer6g->present_pref_6g  = true;
+                     dp_steer6g->pref_6g  = (sp_client_pref_allowed)item->key;
+                     free(val);
+                 }
+            }
+            else if( MSGPACK_OBJECT_MAP  == p->val.type )
+            {
+                if( 0 == match(p, "gwOnlyOverlay"))
+                {
+                    dp_steer6g->gw_only_6g = malloc( sizeof(DpGwOnlyOverlay6g));
+                    memset(dp_steer6g->gw_only_6g, 0, sizeof(DpGwOnlyOverlay6g));
+                    dp_steer6g->present_gw_only_6g = true;
+                    process_dp_steering_6g_gwonly(dp_steer6g->gw_only_6g, &p->val.via.map);
+                }
+            }
+            else
+                MeshError("process_dp_bandsteering6g :  invalid type\n");
+        p++;
+        }
+    }
+    return 0;
+}
+
+
+
+int process_dp_client(DpClientSteering_t *dp_client, msgpack_object_map *map)
+{
+    int left = map->size;
+    msgpack_object_kv *p;
+    c_item_t          *item;
+    char *val;
+
+    p = map->ptr;
+    MeshInfo("process_dp_client : size = %d\n",left);
+    while((0 < left--) )
+    {   
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {   
+            if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
+            {
+                 if( 0 == match(p, "overrideDefault11kv") )
+                 {
+                     dp_client->present_overrideDefault11kv = true;
+                     dp_client->overrideDefault11kv = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "enable") )
+                 {
+                     dp_client->present_enable = true;
+                     dp_client->enable = p->val.via.boolean;
+                 }
+            }
+            else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {
+                if( 0 == match(p, "retryTimeoutHours") )
+                {
+                    dp_client->present_retryTimeoutHours = true;
+                    dp_client->retryTimeoutHours = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "busyOverrideThroughputMbps") )
+                {
+                    dp_client->present_busyOverrideThroughputMbps = true;
+                    dp_client->busyOverrideThroughputMbps = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "busyOverrideProbeSnr") )
+                {
+                    dp_client->present_busyOverrideProbeSnr = true;
+                    dp_client->busyOverrideProbeSnr = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "busyPpdusPerMinute"))
+                {
+                    dp_client->present_busyPpdusPerMinute = true;
+                    dp_client->busyPpdusPerMinute = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "nss5GCap") )
+                {
+                    dp_client->present_nss5GCap = true;
+                    dp_client->nss5GCap = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "nss24GCap") )
+                {
+                    dp_client->present_nss24GCap = true;
+                    dp_client->nss24GCap = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "enforcePeriod") )
+                {
+                    dp_client->present_enforcePeriod = true;
+                    dp_client->enforcePeriod = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "maxRejects") )
+                {
+                    dp_client->present_maxRejects = true;
+                    dp_client->maxRejects = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "hwm3") )
+                {
+                    dp_client->present_hwm3 = true;
+                    dp_client->hwm3 = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "hwm2") )
+                {
+                    dp_client->present_hwm2 = true;
+                    dp_client->hwm2 = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "lwm3") )
+                {
+                    dp_client->present_lwm3 = true;
+                    dp_client->lwm3 = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "lwm2") )
+                {
+                    dp_client->present_lwm2 = true;
+                    dp_client->lwm2 = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "maxPoorThroughputCount") )
+                {
+                    dp_client->present_maxPoorThroughputCount = true;
+                    dp_client->maxPoorThroughputCount = (int) p->val.via.u64;
+                }
+                else if( 0 == match(p, "retryTimeoutHours") )
+                {
+                    dp_client->present_retryTimeoutHours = true;
+                    dp_client->retryTimeoutHours = (int) p->val.via.u64;
+                }
+                else
+                    MeshError("process_bs_11kv_params failed\n");
+            }
+            else if(MSGPACK_OBJECT_STR == p->val.type)
+            {
+                if( 0 == match(p, "kickType") )
+                {   
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                    if (!item) {
+                        MeshError("Unknown kick type %s",val);
+                    }
+                    dp_client->present_kickType = true;
+                    dp_client->kickType  = (sp_client_kick_t)item->key;
+                    if(val)
+                        free(val);
+                }
+                if( 0 == match(p, "specKickType") )
+                {
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                    if (!item) {
+                        MeshError("Unknown kick type %s",val);
+                    }
+                    dp_client->present_specKickType = true;
+                    dp_client->specKickType  = (sp_client_kick_t)item->key;
+                    if(val)
+                        free(val);
+                }
+            }
+            else
+                MeshError("process_dp_client invalid type\n");
+        p++;
+        }
+    }
+    return 0;
+}
+
+int process_configs (configs_t *c, msgpack_object_map *map )
+{
+    int left = map->size;
+    char              *val;
+    c_item_t          *item;
+    msgpack_object_kv *p;
+    MeshInfo("Number of configs = %d\n",left);
+    p = map->ptr;
+    while( 0 < left--)
+    {
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+            if( MSGPACK_OBJECT_STR == p->val.type )
+            {
+                if( 0 == match(p, "name") )
+                {
+                    c->name = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                    MeshInfo("Configs: name = %s\n",c->name);
+                }
+                if( 0 == match(p, "type") )
+                {
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                    item = c_get_item_by_str(map_mwo_configs_type, val);
+                    if (!item) {
+                        MeshError("Unknown type %s\n",val);
+                    }
+                    c->type = (eValueType)item->key;
+                    free(val);
+                }
+                if( 0 == match(p, "data") )
+                {
+                    c->value.string_value = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                    MeshInfo("Configs: value = %s\n",c->value.string_value);
+                }
+            }
+            else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {
+                if( 0 == match(p, "value") )
+                 {
+                     c->value.int_value = (int) p->val.via.u64;
+                     MeshInfo("DeviceProfile: prof_id = %d\n",c->value.int_value);
+                 }
+            }
+            else if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
+            {
+                if( 0 == match(p, "value") )
+                {
+                    c->value.boolean_value = p->val.via.boolean;
+                }
+            }
+        }
+        p++;
+    }
+    return 0;
+}
+
+int process_client_profile(clients_t *e, msgpack_object_map *map )
+{
+    int left = map->size;
+    char              *val;
+    errno_t rc = -1;
+    msgpack_object_kv *p;
+    MeshInfo("Number of process_client_profile = %d\n",left);
+    p = map->ptr;
+    while( 0 < left--)
+    {   
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {  
+           if( MSGPACK_OBJECT_STR == p->val.type )
+           {   
+               if( 0 == match(p, "mac_addr") )
+               {   
+                   val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                   rc = strcpy_s(e->mac,18 , val);
+                    if(rc != EOK)
+                    {   
+                        ERR_CHK(rc);
+                        MeshError("Error in copying\n");
+                    }
+                   MeshInfo("DeviceProfile: mac_addr = %s\n",e->mac);
+                   free(val);
+               }
+            }
+            else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {   
+                if( 0 == match(p, "prof_id") )
+                 {   
+                     e->id = (int) p->val.via.u64;
+                      MeshInfo("DeviceProfile: prof_id = %d\n",e->id);
+                 }
+            }
+        }
+        p++;
+    }
+    return 0;
+}
+
+
+int process_device_profiles( DeviceSpecificProfile_t *e, msgpack_object_map *map )
+{
+    int left = map->size;
+    char              *val;
+    errno_t rc = -1;
+    msgpack_object_kv *p;
+    MeshInfo("No of process_device_profiles = %d\n",left);
+    p = map->ptr;
+    while( 0 < left--)
+    {
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+           if( MSGPACK_OBJECT_STR == p->val.type )
+           {
+               if( 0 == match(p, "description") )
+               {
+                   val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                   rc = strcpy_s(e->description, 100, val);
+                    if(rc != EOK)
+                    {   
+                        ERR_CHK(rc);
+                        MeshError("Error in copying\n");
+                    }
+                   free(val);
+                   MeshInfo("Description =%s\n",e->description);
+               }
+            }
+            else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {
+                if( 0 == match(p, "id") )
+                 {
+                     e->id = (int) p->val.via.u64;
+                     MeshInfo("Id: %d\n",e->id);
+                 }
+            }
+            else if( MSGPACK_OBJECT_MAP  == p->val.type )
+            {   
+                if( 0 == match(p, "clientSteering"))
+                {
+                    e->clientSteering = malloc( sizeof(DpClientSteering_t));
+                    memset( e->clientSteering, 0, sizeof(DpClientSteering_t));
+                    e->present_clientSteering = true;
+                    process_dp_client(e->clientSteering, &p->val.via.map);
+                }
+                if( 0 == match(p, "bandSteering6G"))
+                {
+                    e->bandSteering6g = malloc( sizeof(DpBandSteering6G_t));
+                    memset(e->bandSteering6g, 0, sizeof(DpBandSteering6G_t));
+                    e->present_bandSteering6g = true;
+                    process_dp_bandsteering6g(e->bandSteering6g, &p->val.via.map);
+                }
+                if( 0 == match(p, "bandSteering"))
+                {
+                    e->bandSteering =  malloc( sizeof(DpBandSteering_t));
+                    memset( e->bandSteering, 0, sizeof(DpBandSteering_t));
+                    e->present_bandSteering = true;
+                    process_dp_bandsteering(e->bandSteering, &p->val.via.map);
+                }
+            }
+
+        }
+        p++;
+    }
+    return 0;
+}
+
+c_item_t *
+_c_get_item_by_key(c_item_t *list, int list_sz, int key)
+{
+    c_item_t    *item;
+    int         i;
+
+    for (item = list,i = 0;i < list_sz; item++, i++) {
+        if ((int)(item->key) == key) {
+            return item;
+        }
+    }
+
+    return NULL;
+}
+
+char *
+_c_get_str_by_key(c_item_t *list, int list_sz, int key)
+{
+    c_item_t    *item = _c_get_item_by_key(list, list_sz, key);
+
+    if (!item) {
+        return "";
+    }   
+
+    return (char *)(item->data);
+}
+
+c_item_t *
+_c_get_item_by_str(c_item_t *list, int list_sz, const char *str)
+{
+    c_item_t    *item;
+    int         i;
+
+    for (item = list,i = 0;i < list_sz; item++, i++) {
+        if (strcmp((char *)(item->data), str) == 0) {
+            return item;
+        }
+    }
+
+    return NULL;
+}
+
+int process_bs_gw_only_params(sp_gw_only_t *gw,msgpack_object_map *map,bool is_6g)
+{
+    int left = map->size;
+    c_item_t          *item;
+    char              *val;
+    msgpack_object_kv *p;
+    p = map->ptr;
+    int objects_left;
+
+    if(is_6g)
+    {
+        objects_left = 4;
+        gw->gw_only_6g = malloc(sizeof(sp_gw_only_6g_t));
+        memset(gw->gw_only_6g, 0, sizeof(sp_gw_only_6g_t));
+    }
+    else
+    {
+        objects_left = 2;
+        gw->gw_only_6g = NULL;
+    }
+
+    while( (0 < objects_left) && (0 < left--) )
+    {
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+            if(MSGPACK_OBJECT_STR == p->val.type)
+            {
+                 if( 0 == match(p, "preferred5g") )
+                 {
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                     if (!item) {
+                         MeshError("Unknown preferred 5g %s",val);
+                     }
+                     gw->pref_5g  = (sp_client_pref_allowed)item->key;
+                     free(val);
+                 }
+                 else if( 0 == match(p, "preferred6g") )
+                 {          
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+  
+                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                     if (!item) {
+                         MeshError("Unknown preferred 6g %s",val);
+                     }
+                     if(gw->gw_only_6g)
+                         gw->gw_only_6g->pref_6g  = (sp_client_pref_allowed)item->key;
+                     free(val);
+                 } 
+            }
+            else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {
+                if( 0 == match(p, "lwm") )
+                 {
+                     gw->lwm = (int) p->val.via.u64;
+                 }
+                if( 0 == match(p, "hwm") )
+                 {
+                     if(gw->gw_only_6g)
+                         gw->gw_only_6g->hwm = (int) p->val.via.u64;
+                 }
+            }
+        }
+        --objects_left;
+        p++;
+    }
+    return (0 == objects_left) ? 0 : -1;
+}
+
+int process_bs_11kv_params(sp_btm_params_t *bs,msgpack_object_map *map, int count)
+{
+    int left = map->size;
+    msgpack_object_kv *p;
+    p = map->ptr;
+    int objects_left = count;
+    while( (0 < objects_left) && (0 < left--) )
+    {
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+            if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
+            {      
+                 if( 0 == match(p, "includeNeighbors") )
+                 {
+                     bs->include_neighbors = p->val.via.boolean;
+                 }
+            }
+            else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {
+                if( 0 == match(p, "validityIntervalInTBTT") )
+                 {
+                     bs->valid_interval_tbtt = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "abridged") )
+                 {
+                     bs->abridged = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "preferred") )
+                 {
+                     bs->pref = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "disassociationImminent") )
+                 {
+                     bs->disassociation_imminent = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "bssTermination") )
+                 {
+                     bs->bss_termination = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "retryCount") )
+                 {
+                     bs->retry_count = (int) p->val.via.u64;
+                 }
+                 else if( 0 == match(p, "retryInterval") )
+                 {
+                     bs->retry_interval = (int) p->val.via.u64;
+                 }
+                 else
+                     MeshError("process_bs_11kv_params failed\n");
+            }
+            else
+                MeshError("process_bs_11kv_params invalid type\n");
+        --objects_left;
+        p++;
+        }
+    }
+    return (0 == objects_left) ? 0 : -1;
+}
+/**
+ *  Convert the msgpack map into the sp_band_steering_t structure.
+ *
+ *  @param e    the entry pointer
+ *  @param map  the msgpack map pointer
+ *
+ *  @return 0 on success, error otherwise
+ */
+int process_dfs_params( sp_defaultdoc_t *steer, msgpack_object_map *map)
+{
+    int left = map->size;
+    int objects_left = 1;
+    msgpack_object_kv *p;
+    sp_dfs_t *e;
+    e = steer->dfs;
+    p = map->ptr;
+    while( (0 < objects_left) && (0 < left--) )
+    {   
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+
+              if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
+              {  
+                 if( 0 == match(p, "supported") )
+                 {   
+                     e->is_supported = p->val.via.boolean;
+                 }
+             }
+       }
+        --objects_left;
+        p++;
+    }
+    return (0 == objects_left) ? 0 : -1;
+}
+
+/**
+ *  Convert the msgpack map into the sp_band_steering_t structure.
+ *
+ *  @param e    the entry pointer
+ *  @param map  the msgpack map pointer
+ *
+ *  @return 0 on success, error otherwise
+ */
+int process_csparams( sp_defaultdoc_t *steer, msgpack_object_map *map)
+{
+    int left = map->size;
+    c_item_t                *item;
+    char              *val;
+    int objects_left = 32;
+    msgpack_object_kv *p;
+    sp_client_steering_t *e;
+    e = steer->client_steering;
+    p = map->ptr;
+    while( (0 < objects_left) && (0 < left--) )
+    {
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+
+              if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
+              {
+                 if( 0 == match(p, "enable") )
+                 {
+                     e->enable = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "overrideDefault11kv") )
+                 {
+                     e->override_default_11kv = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "authBlock") )
+                 {
+                     e->auth_block = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "probeBlock") )
+                 {
+                     e->probe_block = p->val.via.boolean;
+                 }
+              }
+              else if(MSGPACK_OBJECT_STR == p->val.type)
+              {
+                 if( 0 == match(p, "kickType") )
+                 {
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                     if (!item) {
+                         MeshError("Unknown kick type %s",val);
+                     }
+                     e->kick_type  = (sp_client_kick_t)item->key;
+                     if(val)
+                         free(val);
+                 }
+                 if( 0 == match(p, "specKickType") )
+                 {   
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                     if (!item) {
+                         MeshError("Unknown kick type %s",val);
+                     }
+                     e->spec_kick_type  = (sp_client_kick_t)item->key;
+                     if(val)
+                         free(val);
+                 }
+                 if( 0 == match(p, "rejectDetection") )
+                 {   
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_reject_detection, val);
+                     if (!item) {
+                         MeshError("Unknown reject detection %s",val);
+                     }
+                     e->reject_detection = (sp_client_reject_t)item->key;
+                     if(val)
+                         free(val);
+                 }
+              }
+              else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+              {  
+                 if( 0 == match(p, "backoffSeconds") )
+                 {
+                     e->backoff_seconds = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "maxKicksInHour") )
+                 {   
+                     e->max_kicks_in_hour = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "maxPoorThroughputCount") )
+                 {   
+                     e->max_poor_throughput_count = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "throughputImprovementPct") )
+                 {   
+                     e->tp_improvement_pct = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "throughputImprovementPct2gOnly") )
+                 {   
+                     e->tp_improvement_pct_2g_only = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "throughputImprovementPctDownsteer") )
+                 {   
+                     e->tp_improvement_pct_downsteer = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "throughputImprovementPct5gTo6g") )
+                 {   
+                     e->tp_improvement_pct_5g_to_6g = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "throughputImprovementPct6gTo5g") )
+                 {   
+                     e->tp_improvement_pct_6g_to_5g = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "kickReason") )
+                 {   
+                     e->kick_reason = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "lwm") )
+                 {   
+                     e->lwm = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "lwm_6g") )
+                 {   
+                     e->lwm_6g = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "hwm") )
+                 {   
+                     e->hwm = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "authRejectReason") )
+                 {   
+                     e->auth_reject_reason = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "maxRejects") )
+                 {   
+                     e->max_rejects = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "maxRejectsPeriod") )
+                 {   
+                     e->max_rejects_period = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "recoveryPeriod") )
+                 {
+                     e->recovery_period = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "enforcePeriod") )
+                 {   
+                     e->enforce_period = (int) p->val.via.u64;
+                     MeshInfo("e->enforce_period :%d\n",e->enforce_period);
+                 }
+                 if( 0 == match(p, "scKickDebouncePeriod") )
+                 {   
+                     e->sc_kick_debounce_period = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "busyThresholdMbps") )
+                 {
+                     e->busy_threshold_mbps = p->val.via.u64;
+                 }
+                 if( 0 == match(p, "throughputChangeMbps") )
+                 {
+                     e->tp_change_mbps = p->val.via.f64;
+                 }
+                 if( 0 == match(p, "throughputChangeMbps2gOnly") )
+                 {
+                     e->tp_change_mbps_2g_only = p->val.via.f64;
+                 }
+                 if( 0 == match(p, "throughputChangeMbpsDownsteer") )
+                 {
+                     e->tp_change_mbps_downsteer = p->val.via.f64;
+                 }
+                 if( 0 == match(p, "throughputChangeMbps5gTo6g") )
+                 {
+                     e->tp_change_mbps_5g_to_6g = p->val.via.f64;
+                 }
+              }
+              else if( MSGPACK_OBJECT_MAP  == p->val.type )
+              {
+                  if( 0 == match(p, "dot11vParamDirectedSteering") )
+                  {
+                      e->kv_params_direct = malloc( sizeof(sp_btm_params_t));
+                      memset(e->kv_params_direct, 0, sizeof(sp_btm_params_t));
+                      if( 0 != process_bs_11kv_params(e->kv_params_direct,&p->val.via.map, 7))
+                      {
+                          MeshInfo(("dot11vParamDirectedSteering failed\n"));
+                          return -1;
+                      }
+                  }
+             }
+         }
+        --objects_left;
+        p++;
+    }
+    return (0 == objects_left) ? 0 : -1;
+}
+
+/**
+ *  Convert the msgpack map into the sp_band_steering_t structure.
+ *
+ *  @param e    the entry pointer
+ *  @param map  the msgpack map pointer
+ *
+ *  @return 0 on success, error otherwise
+ */
+int process_bsdefaultprofile( sp_defaultdoc_t *sp_default, msgpack_object_map *map)
+{
+    int left = map->size;
+    msgpack_object_kv *p;
+
+    p = map->ptr;
+    sp_default->band_steer = malloc( sizeof(sp_band_steering_t));
+    memset(sp_default->band_steer, 0, sizeof(sp_band_steering_t));
+    sp_default->band_steer_6g = malloc( sizeof(sp_band_steering_t));
+    memset(sp_default->band_steer_6g, 0, sizeof(sp_band_steering_t));
+    sp_default->client_steering = malloc(sizeof(sp_client_steering_t));
+    memset(sp_default->client_steering, 0, sizeof(sp_client_steering_t));
+    sp_default->dfs = malloc(sizeof(sp_dfs_t));
+    memset(sp_default->dfs, 0, sizeof(sp_dfs_t));
+
+    while( (0 < left--) )
+    {
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {   
+            if( MSGPACK_OBJECT_MAP == p->val.type )
+            {
+                if( 0 == match(p, "bandSteering"))
+                {
+                    if( 0 != process_bsparams(sp_default,&p->val.via.map,false))
+                    {   
+                        MeshInfo(("process_band steering failed\n"));
+                        //return -1;
+                    }
+                }
+                else if( 0 == match(p, "bandSteering6G"))
+                {
+                    if( 0 != process_bsparams(sp_default,&p->val.via.map,true))
+                    {     
+                        MeshInfo(("process_band steering 6g failed\n"));
+                        return -1;
+                    }
+                }
+                else if( 0 == match(p, "clientSteering"))
+                {
+                    if( 0 != process_csparams(sp_default,&p->val.via.map))
+                    {     
+                        MeshInfo(("process_band clientSteering failed\n"));
+                        return -1;
+                    }
+                }
+                else if( 0 == match(p, "dfs"))
+                {
+                    if( 0 != process_dfs_params(sp_default,&p->val.via.map))
+                    {   
+                        MeshInfo(("process_band dfs failed\n"));
+                        return -1;
+                    }
+                }
+            }
+        }
+        p++;
+    }
+    return 0;
+}
+
+/**
+ *  Convert the msgpack map into the sp_band_steering_t structure.
+ *
+ *  @param e    the entry pointer
+ *  @param map  the msgpack map pointer
+ *
+ *  @return 0 on success, error otherwise
+ */
+int process_bsparams( sp_defaultdoc_t *steer, msgpack_object_map *map, bool is_6g )
+{
+    int left = map->size;
+    c_item_t                *item;
+    char              *val;
+    int objects_left;
+    msgpack_object_kv *p;
+    sp_band_steering_t *e;
+
+    if(is_6g)
+    {
+        objects_left = 34;
+        e = steer->band_steer_6g;
+        e->band_steering_6g = malloc(sizeof(sp_band_steering_6g_t));
+        memset(e->band_steering_6g, 0, sizeof(sp_band_steering_6g_t));
+    }
+    else
+    {
+        objects_left = 29;
+        e = steer->band_steer;
+        e->band_steering_6g = NULL;
+    }
+    p = map->ptr;
+    while( (0 < objects_left) && (0 < left--) )
+    {
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+              
+              if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
+              {
+                 if( 0 == match(p, "enable") )
+                 {
+                     e->enable = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "steerDuringBackoff") )
+                 {
+                     e->steer_during_backoff = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "preAssociationAuthBlock") )
+                 {
+                     e->pre_assoc_auth_block = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "kickUponIdleOnly") )
+                 {
+                     e->kick_upon_idle = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "neighborListFilterByBeaconReport") )
+                 {
+                     e->neighbor_list_filter_by_beacon_report = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "neighborListFilterByBTMStatus") )
+                 {
+                     e->neighborListFilterByBTMStatus = p->val.via.boolean;
+                 }
+                 if( 0 == match(p, "steerDuringBackoff") )
+                 {
+                     if(e->band_steering_6g)
+                         e->band_steering_6g->steerDuringBackoff = (int) p->val.via.boolean;
+                 }
+
+              }
+              else if(MSGPACK_OBJECT_STR == p->val.type)
+              {
+                 if( 0 == match(p, "kickType") )
+                 {
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                     if (!item) {
+                         MeshError("Unknown kick type %s",val);
+                     }
+                     e->kick_type  = (sp_client_kick_t)item->key;
+                     free(val);
+                 }
+                 if( 0 == match(p, "stickyKickType") )
+                 {
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                     if (!item) {
+                         MeshError("Unknown sticky kick type %s",val);
+                     }
+                     e->sticky_kick_type  = (sp_client_kick_t)item->key;
+                     free(val);
+                 }
+                 if( 0 == match(p, "preferred5g") )
+                 {
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                     if (!item) {
+                         MeshError("Unknown preferred 5g %s",val);
+                     }
+                     e->pref_allowed  = (sp_client_pref_allowed)item->key;
+                     free(val);
+                 }
+                 if( 0 == match(p, "preferred6g") )
+                 {
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                     if (!item) {
+                         MeshError("Unknown preferred 6g %s",val);
+                     }
+                     e->pref_6g  = (sp_client_pref_allowed)item->key;
+                     if (val)
+                         free(val);
+                 }
+
+                 if( 0 == match(p, "rejectDetection") )
+                 {
+                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+
+                     item = c_get_item_by_str(map_ovsdb_reject_detection, val);
+                     if (!item) {
+                         MeshError("Unknown reject detection %s",val);
+                     }
+                     e->reject_detection = (sp_client_reject_t)item->key;
+                     if(val)
+                         free(val);
+                 }
+              }
+              else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+              {
+                 if( 0 == match(p, "hwm") )
+                 {
+                     e->hwm = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "hwm2") )
+                 {
+                     if(e->band_steering_6g)
+                         e->band_steering_6g->hwm2 = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "hwm3") )
+                 {
+                     if(e->band_steering_6g)
+                         e->band_steering_6g->hwm3 = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "lwm2") )
+                 {
+                     if(e->band_steering_6g)
+                         e->band_steering_6g->lwm2 = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "lwm3") )
+                 {
+                     if(e->band_steering_6g)
+                         e->band_steering_6g->lwm3 = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "kickReason") )
+                 {
+                     e->kick_reason = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "stickyKickReason") )
+                 {
+                     e->sticky_kick_reason = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "lwm") )
+                 {
+                     e->lwm = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "bottomLwm") )
+                 {
+                     e->bottomLwm = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "kickDebouncePeriod") )
+                 {
+                     e->kick_debounce_period = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "stickyKickDebouncePeriod") )
+                 {
+                     e->sticky_kick_debounce_period = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "backoffSeconds") )
+                 {
+                     e->backoff_second = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "backoffExpBase") )
+                 {
+                     e->backoff_exp_base = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "stickyKickGuardTime") )
+                 {
+                     e->sticky_kick_guard_time = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "stickyKickBackoffTime") )
+                 {
+                     e->sticky_kick_backoff_time = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "maxRejects") )
+                 {
+                     e->max_rejects = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "rejectsTimeoutSeconds") )
+                 {
+                     e->max_rejects_period = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "btmMaxNeighbors") )
+                 {
+                     e->btmMaxNeighbors = (int) p->val.via.u64;
+                 }
+                 if( 0 == match(p, "btmMaxNeighbors6g") )
+                 {
+                     e->btmMaxNeighbors6g = (int) p->val.via.u64;
+                 }
+              }
+              else if( MSGPACK_OBJECT_MAP  == p->val.type )
+              {
+                  if( 0 == match(p, "dot11vParamBandSteering") )
+                  {
+                      e->steering_btm_params = malloc( sizeof(sp_btm_params_t));
+                      memset(e->steering_btm_params, 0, sizeof(sp_btm_params_t));
+                      if( 0 != process_bs_11kv_params(e->steering_btm_params,&p->val.via.map, 7))
+                      {
+                          MeshInfo(("dot11vParamBandSteering failed\n"));
+                          return -1;
+                      }
+                  }
+                  else if( 0 == match(p, "dot11vParamStickyClientSteering") )
+                  {
+                      e->sticky_btm_params = malloc( sizeof(sp_btm_params_t));
+                      memset(e->sticky_btm_params, 0, sizeof(sp_btm_params_t));
+                      if( 0 != process_bs_11kv_params(e->sticky_btm_params,&p->val.via.map, 8))
+                      {
+                          MeshInfo(("dot11vParamStickyClientSteering failed\n"));
+                          return -1;
+                      }
+                  }
+                  else if( 0 == match(p, "gwOnlyOverlay"))
+                  {
+                      e->for_gw_only = malloc( sizeof(sp_gw_only_t));
+                      memset(e->for_gw_only, 0, sizeof(sp_gw_only_t));
+                      if( 0 != process_bs_gw_only_params(e->for_gw_only,&p->val.via.map,is_6g))
+                      {
+                          MeshInfo(("gwOnlyOverlay failed\n"));
+                          return -1;
+                      }
+                  }
+                  else
+                      MeshInfo("Invalid steering data4\n");
+
+              }
+        }
+        --objects_left;
+        p++;
+    }
+    return (0 == objects_left) ? 0 : -1;
+}
+
+/* See helper.h for details. */
+void destroy_bsdoc(void *data)
+{
+    sp_band_steering_t *mb = (sp_band_steering_t *) data;
+    if(NULL != mb)
+        free( mb);
+}
+
+int process_bsdoc(void *data,int num, ...)
+{
+
+//To access the variable arguments use va_list
+    va_list valist;
+    sp_defaultdoc_t *bs = (sp_defaultdoc_t *)data;
+    //sp_band_steering_t *bs = (sp_band_steering_t *) data;
+    va_start(valist, num);//start of variable argument loop
+
+    msgpack_object *obj = va_arg(valist, msgpack_object *);//each usage of va_arg fn argument iterates by one time
+    msgpack_object_map *mapobj = &obj->via.map;
+
+    va_end(valist);//End of variable argument loop
+
+    if( 0 != process_bsparams(bs,mapobj, false))
+    {
+        MeshInfo(("process_band steering failed\n"));
+        return -1;
+    }
+
+    return 0;
+}
+
+void destroy_bs_gw_only_doc(void *data)
+{
+    sp_btm_params_t *gw = (sp_btm_params_t *) data;
+    if(NULL != gw)
+        free(gw);
+}
+
+int process_bs_gw_only_doc(void *data, int num ,...)
+{
+//To access the variable arguments use va_list
+    va_list valist;
+    sp_gw_only_t *gw = (sp_gw_only_t *) data;
+    va_start(valist, num);//start of variable argument loop
+
+    msgpack_object *obj = va_arg(valist, msgpack_object *);//each usage of va_arg fn argument iterates by one time
+    msgpack_object_map *mapobj = &obj->via.map;
+
+    va_end(valist);//End of variable argument loop
+
+    if( 0 != process_bs_gw_only_params(gw,mapobj,true))
+    {
+        MeshInfo(("process gateway only blob failed\n"));
+        return -1;
+    }
+    return 0;
+}
+
+void destroy_bs_sticky_11kvdoc(void *data)
+{
+    sp_btm_params_t *bs = (sp_btm_params_t *)data;
+    if(NULL != bs)
+        free(bs);
+}
+
+int process_bs_sticky_11kvdoc (void *data, int num ,...)
+{
+//To access the variable arguments use va_list
+    va_list valist;
+    sp_btm_params_t *sticky_btm = (sp_btm_params_t *)data;
+
+    va_start(valist, num);//start of variable argument loop
+    msgpack_object *obj = va_arg(valist, msgpack_object *);//each usage of va_arg fn argument iterates by one time
+    msgpack_object_map *mapobj = &obj->via.map;
+
+    va_end(valist);//End of variable argument loop
+
+    if( 0 != process_bs_11kv_params(sticky_btm,mapobj, 8))
+    {
+        MeshInfo(("process sticky steering 11kv doc failed\n"));
+        return -1;
+    }
+    return 0;
+}
+void destroy_bs_11kvdoc(void *data)
+{
+    sp_btm_params_t *bs = (sp_btm_params_t *) data;
+    if(NULL != bs)
+        free(bs);
+}
+
+int process_bs_11kvdoc (void *data,int num, ...)
+{
+//To access the variable arguments use va_list
+    va_list valist;
+    sp_btm_params_t *bs = (sp_btm_params_t *) data;
+
+    va_start(valist, num);//start of variable argument loop
+    msgpack_object *obj = va_arg(valist, msgpack_object *);//each usage of va_arg fn argument iterates by one time
+    msgpack_object_map *mapobj = &obj->via.map;
+
+    va_end(valist);//End of variable argument loop
+
+    if( 0 != process_bs_11kv_params(bs,mapobj, 7))
+    {
+        MeshInfo(("process band steering 11kv failed\n"));
+        return -1;
+    }
+    return 0;
+}
+
+void destroy_configsdoc(void *data)
+{
+    configs_doc_t *configs = (configs_doc_t *) data;
+    if(NULL != configs)
+    {
+        if(NULL != configs->subdoc_name)
+        {
+            free( configs->subdoc_name);
+            configs->subdoc_name = NULL;
+        }
+        if(NULL != configs->config_data)
+        {
+            if(configs->config_data->name)
+            {
+                 free(configs->config_data->name);
+                 configs->config_data->name = NULL;
+            }
+            if (configs->config_data->type  == TYPE_STRING)
+            {
+                if(configs->config_data->value.string_value)
+                {
+                    free(configs->config_data->value.string_value);
+                    configs->config_data->value.string_value = NULL;
+                }
+            }
+            free(configs->config_data);
+            configs->config_data = NULL;
+        }
+    }
+}
+
+void destroy_dpdoc(void *data)
+{
+    dp_doc_t *dp = (dp_doc_t *) data;
+    if(NULL != dp)
+    {   
+        if(NULL != dp->subdoc_name)
+        {   
+            free( dp->subdoc_name);
+            dp->subdoc_name = NULL;
+        }
+        if(NULL != dp->clients)
+        {   
+            free( dp->clients);
+            dp->clients = NULL;
+        }
+        free(dp);
+        dp = NULL;
+    }
+}
+
+void destroy_spsteeringdoc(void *data)
+{
+    sp_doc_t *mb = (sp_doc_t *)data;
+
+    if(NULL != mb)
+    {   
+        if(NULL != mb->subdoc_name)
+            free( mb->subdoc_name );
+
+        if(NULL != mb->sp_default)
+        {   
+            if(NULL != mb->sp_default->band_steer)
+            {   
+                if(mb->sp_default->band_steer->band_steering_6g)
+                {   
+                    free(mb->sp_default->band_steer->band_steering_6g);
+                    mb->sp_default->band_steer->band_steering_6g = NULL;
+                }
+                if(mb->sp_default->band_steer->steering_btm_params)
+                {   
+                    free(mb->sp_default->band_steer->steering_btm_params);
+                    mb->sp_default->band_steer->steering_btm_params = NULL;
+                }
+                if(mb->sp_default->band_steer->sticky_btm_params)
+                {   
+                    free(mb->sp_default->band_steer->sticky_btm_params);
+                    mb->sp_default->band_steer->sticky_btm_params = NULL;
+                }
+                if(mb->sp_default->band_steer->for_gw_only)
+                {   
+                    if(mb->sp_default->band_steer->for_gw_only->gw_only_6g)
+                    {   
+                        free(mb->sp_default->band_steer->for_gw_only->gw_only_6g);
+                        mb->sp_default->band_steer->for_gw_only->gw_only_6g = NULL;
+                    }
+                    free(mb->sp_default->band_steer->for_gw_only);
+                    mb->sp_default->band_steer->for_gw_only = NULL;
+               }
+               free( mb->sp_default->band_steer);
+               mb->sp_default->band_steer = NULL;
+           }
+
+           if(NULL != mb->sp_default->band_steer_6g)
+           {   
+               if(mb->sp_default->band_steer_6g->band_steering_6g)
+               {   
+                   free(mb->sp_default->band_steer_6g->band_steering_6g);
+                   mb->sp_default->band_steer_6g->band_steering_6g = NULL;
+               }
+               if(mb->sp_default->band_steer_6g->steering_btm_params)
+               {   
+                   free(mb->sp_default->band_steer_6g->steering_btm_params);
+                   mb->sp_default->band_steer_6g->steering_btm_params = NULL;
+               }
+               if(mb->sp_default->band_steer_6g->sticky_btm_params)
+               {   
+                   free(mb->sp_default->band_steer_6g->sticky_btm_params);
+                   mb->sp_default->band_steer_6g->sticky_btm_params = NULL;
+               }
+              if(mb->sp_default->band_steer_6g->for_gw_only)
+              {  
+                 if(mb->sp_default->band_steer_6g->for_gw_only->gw_only_6g)
+                 {   
+                     free(mb->sp_default->band_steer_6g->for_gw_only->gw_only_6g);
+                     mb->sp_default->band_steer_6g->for_gw_only->gw_only_6g = NULL;
+                 }
+                 free(mb->sp_default->band_steer_6g->for_gw_only);
+                 mb->sp_default->band_steer_6g->for_gw_only = NULL;
+             }   
+                 free( mb->sp_default->band_steer_6g);
+                 mb->sp_default->band_steer_6g = NULL;
+        }
+
+        if(NULL != mb->sp_default->client_steering)
+        {
+            if(mb->sp_default->client_steering)
+            {
+                free(mb->sp_default->client_steering->kv_params_direct);
+                mb->sp_default->client_steering->kv_params_direct = NULL;
+                free(mb->sp_default->client_steering);
+                mb->sp_default->client_steering = NULL;
+            }
+        }
+        if(NULL != mb->sp_default->dfs)
+        {
+            free(mb->sp_default->dfs);
+            mb->sp_default->dfs = NULL;
+        }
+        if(NULL != mb->device)
+        {
+            for (int i = 0;i<14;i++)
+            {
+                if(mb->device->profiles[i].bandSteering)
+                {
+                    if(mb->device->profiles[i].bandSteering->gwOnly)
+                    {
+                        free(mb->device->profiles[i].bandSteering->gwOnly);
+                        mb->device->profiles[i].bandSteering->gwOnly = NULL;
+                    }
+                    free(mb->device->profiles[i].bandSteering);
+                    mb->device->profiles[i].bandSteering = NULL;
+                }
+                if(mb->device->profiles[i].bandSteering6g)
+                {
+                    if(mb->device->profiles[i].bandSteering6g->gw_only_6g)
+                    {
+                        free(mb->device->profiles[i].bandSteering6g->gw_only_6g);
+                        mb->device->profiles[i].bandSteering6g->gw_only_6g = NULL;
+                    }
+                    free(mb->device->profiles[i].bandSteering6g);
+                    mb->device->profiles[i].bandSteering6g = NULL;
+                }
+            }
+            free(mb->device);
+            mb->device = NULL;
+        }
+        free( mb->sp_default);
+        mb->sp_default = NULL;
+    }
+    free(mb);
+    mb = NULL;
+    }
+}
+
+int process_configsdoc( void  *data,int num, ... )
+{
+    //To access the variable arguments use va_list
+    va_list valist;
+    int i;
+
+    configs_doc_t *co = (configs_doc_t *)data;
+
+    va_start(valist, num);//start of variable argument loop
+
+    msgpack_object *obj = va_arg(valist, msgpack_object *);
+    msgpack_object_array *array = &obj->via.array;
+
+    msgpack_object *obj1 = va_arg(valist, msgpack_object *);
+    co->subdoc_name = strndup( obj1->via.str.ptr, obj1->via.str.size );
+
+    msgpack_object *obj2 = va_arg(valist, msgpack_object *);
+    co->version = (uint32_t) obj2->via.u64;
+
+    msgpack_object *obj3 = va_arg(valist, msgpack_object *);
+
+    co->transaction_id = (uint16_t) obj3->via.u64;
+    va_end(valist);//End of variable argument loop
+
+    co->count = array->size;
+    co->config_data = malloc( sizeof(configs_t)*co->count);
+    memset(co->config_data, 0, (sizeof(configs_t)*co->count));
+    MeshInfo("configs_doc count : %d\n",co->count);
+    for( i = 0; i < co->count; i++ )
+    {
+        if( 0 != process_configs(&co->config_data[i], &array->ptr[i].via.map) )
+        {
+            MeshInfo("process_configsdoc failed\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int process_dpdoc( void  *data,int num, ... )
+{
+    //To access the variable arguments use va_list
+    va_list valist;
+    int i, left;
+
+    dp_doc_t *dp = (dp_doc_t *)data;
+
+    va_start(valist, num);//start of variable argument loop
+
+    msgpack_object *obj = va_arg(valist, msgpack_object *);
+    msgpack_object_array *array = &obj->via.array;
+
+    msgpack_object *obj1 = va_arg(valist, msgpack_object *);
+    dp->subdoc_name = strndup( obj1->via.str.ptr, obj1->via.str.size );
+
+    msgpack_object *obj2 = va_arg(valist, msgpack_object *);
+    dp->version = (uint32_t) obj2->via.u64;
+
+    msgpack_object *obj3 = va_arg(valist, msgpack_object *);
+
+    dp->transaction_id = (uint16_t) obj3->via.u64;
+    va_end(valist);//End of variable argument loop
+
+    left = array->size;
+    dp->count = array->size;
+    dp->clients = malloc( sizeof(clients_t)*left);
+    memset(dp->clients, 0, sizeof(clients_t)*left);
+    for( i = 0; i < left; i++ )
+    {
+        if( 0 != process_client_profile(&dp->clients[i], &array->ptr[i].via.map) )
+        {   
+            MeshInfo("process_client_profile failed\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int process_spsteeringdoc( void  *data,int num, ... )
+{
+    //To access the variable arguments use va_list
+    va_list valist;
+    msgpack_object_kv *p;
+
+    sp_doc_t *sp = (sp_doc_t *)data;
+
+    va_start(valist, num);//start of variable argument loop
+
+    msgpack_object *obj = va_arg(valist, msgpack_object *);
+    msgpack_object_map *mapobj = &obj->via.map;
+
+    msgpack_object *obj1 = va_arg(valist, msgpack_object *);
+    sp->subdoc_name = strndup( obj1->via.str.ptr, obj1->via.str.size );
+
+    msgpack_object *obj2 = va_arg(valist, msgpack_object *);
+    sp->version = (uint32_t) obj2->via.u64;
+
+    msgpack_object *obj3 = va_arg(valist, msgpack_object *);
+
+    sp->transaction_id = (uint16_t) obj3->via.u64;
+    sp->sp_default= malloc( sizeof(sp_defaultdoc_t));
+    memset(sp->sp_default, 0, sizeof(sp_defaultdoc_t));
+    sp->device = malloc( sizeof(DeviceSpecificProfiles_t));
+    memset(sp->device, 0, sizeof(DeviceSpecificProfiles_t));
+
+    va_end(valist);//End of variable argument loop
+    p = mapobj->ptr;
+
+
+    int left = mapobj->size;
+    while( (0 < left--) )
+    {   
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {   
+            if( MSGPACK_OBJECT_MAP == p->val.type )
+            {
+                if( 0 == match(p, "steeringprofiledefaults"))
+                {
+                    if( 0 != process_bsdefaultprofile(sp->sp_default,&p->val.via.map))
+                    {   
+                        MeshInfo(("process steeringprofiledefaults failed\n"));
+                        return -1;
+                    }
+                }
+            }
+            if(MSGPACK_OBJECT_ARRAY == p->val.type)
+            {
+                if( 0 == match(p, "devicespecificprofiles"))
+                {
+                    if( 0 != process_device_profile(sp->device,&p->val.via.array))
+                    {
+                        return -1;
+                    }
+                }
+            }
+        }
+        p++;   
+    }
+    return 0;
+}
+
+int process_device_profile( DeviceSpecificProfiles_t *device, msgpack_object_array *array )
+{
+    if( 0 < array->size )
+    {
+        size_t i;
+
+        memset( device, 0, sizeof(DeviceSpecificProfiles_t));
+        for( i = 0; i < array->size; i++ )
+        {
+            if( MSGPACK_OBJECT_MAP != array->ptr[i].type )
+            {
+                errno = MB_INVALID_OBJECT;
+                return -1;
+            }
+            if( 0 != process_device_profiles(&device->profiles[i], &array->ptr[i].via.map))
+            {
+                MeshInfo("process_device_profiles failed\n");
+                return -1;
+            }
+        }
+    }
     return 0;
 }

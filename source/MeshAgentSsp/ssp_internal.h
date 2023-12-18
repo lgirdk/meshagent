@@ -52,12 +52,18 @@
 #define  CCSP_MESHAGENT_START_CFG_FILE						"MeshAgent.cfg"
 
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED)
+#if 0
 #define EVENT_MESH_ETHERNETBHAUL_UPLINK  "Device.X_RDK_MeshAgent.EthernetBhaulUplink.Status"
 #define EVENT_MESH_WAN_LINK              "Device.X_RDK_MeshAgent.MeshWANLink.Status"
 #define EVENT_MESH_WAN_IFNAME            "Device.X_RDK_MeshAgent.MeshWANLink.Interface.Name"
+#endif
 #define MESH_WAN_INTERFACE               "dmsb.Mesh.WAN.Interface.Name"
 #define MESH_ETH_INTERFACE               "dmsb.l2net.11.Members.Link"
-#define NUM_OF_RBUS_PARAMS                4
+#if 0
+#define NUM_OF_RBUS_PARAMS                6
+#define EVENT_MWO_TOS_CONFIGURATION      "Device.X_RDK_MeshAgent.MWO.SteeringProfileData"
+#define EVENT_MWO_CLIENT_TO_PROFILE_MAP_EVENT "Device.X_RDK_MeshAgent.MWO.ClientProfileData"
+#endif
 #endif
 
 #define WIFI_STA_INTERFACE_NAME          "Device.WiFi.STA.%d.InterfaceName"
@@ -65,7 +71,6 @@
 #define MESH_STA_DISCONNECT_EVENT        "Device.WiFi.X_RDK_STATriggerDisconnection"
 #define MESH_GATEWAY_NOT_ACTIVE          "Device.X_RDK_GatewayManagement.SendRequestBackUpGatewayNotActive"
 #define MAX_BSS_ID                       6
-#define EVENT_MESH_BACKHAUL_IFNAME       "Device.X_RDK_MeshAgent.MeshBackHaul.Ifname"
 #define      AP_ACTIVE                0
 #define      STA_ACTIVE               1
 /*From wifi_hal_generic.h.
@@ -81,12 +86,6 @@ typedef struct {
     wifi_connection_status_t    connect_status;
     unsigned char               bssid[MAX_BSS_ID];
 }__attribute__((packed)) wifi_sta_conn_info_t;
-
-typedef enum {
-    MESH_TYPE_BOOL,
-    MESH_TYPE_INT,
-    MESH_TYPE_STRING
-}rbus_type_t;
 
 /**
  * @brief Defines component Structure

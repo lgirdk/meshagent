@@ -27,9 +27,9 @@
 #include "ccsp_trace.h"
 #include "safec_lib_common.h"
 #include <msgpack.h>
-#include "helpers.h"
 #include "cosa_apis_util.h"
 #include <trower-base64/base64.h>
+#include "helpers.h"
 
 #define DEBUG_INI_NAME  "/etc/debug.ini"
 extern bool isXB3Platform;
@@ -122,7 +122,8 @@ void _MESHAGENT_LOG(unsigned int level, const char *msg, ...)
     *  MeshAgent_SetParamStringValue
     *  GreAcc_GetParamBoolValue
     *  GreAcc_SetParamBoolValue
-    *  OVS_GetParamBoolValue
+    *  MWO_GetParamStringValue
+    *  MWO_SetParamStringValue
     *  OVS_SetParamBoolValue
     *  MeshAgent_Validate
     *  MeshAgent_Commit
@@ -309,6 +310,87 @@ OVS_GetParamBoolValue
     MeshWarning("Unsupported parameter '%s'\n", ParamName);
 
     return FALSE;
+}
+
+/**********************************************************************
+
+    caller:     owner of this object
+
+    prototype:
+
+        BOOL
+        MWO_GetParamStringValue
+            (
+                ANSC_HANDLE                 hInsContext,
+                char*                       ParamName,
+                char*                       pValue,
+                ULONG*                      pUlSize
+            );
+
+    description:
+
+        This function is called to retrieve string parameter value;
+
+    argument:   ANSC_HANDLE                 hInsContext,
+                The instance handle;
+
+                char*                       ParamName,
+                The parameter name;
+
+                char*                       pValue,
+                The string value buffer;
+
+                ULONG*                      pUlSize
+                The buffer of length of string value;
+                Usually size of 1023 will be used.
+                If it's not big enough, put required size here and return 1;
+
+    return:     0 if succeeded;
+                1 if short of buffer size; (*pUlSize = required size)
+                -1 if not supported.
+**********************************************************************/
+ULONG
+MWO_GetParamStringValue
+    (
+        ANSC_HANDLE                 hInsContext,
+        char*                       ParamName,
+        char*                       pValue,
+        ULONG*                      pUlSize
+    )
+{
+    UNREFERENCED_PARAMETER(hInsContext);
+
+    if(strcmp(ParamName, "Configs") == 0)
+    {
+        MeshInfo(("MWO Configs Get Not supported\n"));
+        strcpy(pValue, "");
+        return 0;
+    }
+
+    if(strcmp(ParamName, "SteeringProfileData") == 0)
+    {
+        MeshDebug(("SteeringProfileData Get Not supported\n"));
+        strcpy(pValue, "");
+        return 0;
+    }
+
+    if(strcmp(ParamName, "ClientProfileData") == 0)
+    {
+        MeshDebug(("ClientProfileData Get Not supported\n"));
+        strcpy(pValue, "");
+        return 0;
+    }
+
+    if(strcmp(ParamName, "StatsConfigData") == 0)
+    {
+        MeshInfo(("StatsConfigData Get Not supported\n"));
+        strcpy(pValue, "");
+        return 0;
+    }
+
+    MeshError("Unsupported Namespace:%s size:%ln\n", ParamName,pUlSize);
+
+    return -1;
 }
 
 /**********************************************************************
@@ -1169,6 +1251,8 @@ MeshAgent_SetParamStringValue
     )
 {
     UNREFERENCED_PARAMETER(hInsContext);
+    BOOL ret = TRUE;
+//    int size = 0;
 
     if (strcmp(ParamName, "URL") == 0)
     {
@@ -1251,122 +1335,82 @@ MeshAgent_SetParamStringValue
 
     if (strcmp(ParamName, "Data") == 0)
     {
-        char * decodeMsg =NULL;
-        int decodeMsgSize =0;
-        int size =0;
-
-        msgpack_zone mempool;
-        msgpack_object deserialized;
-        msgpack_unpack_return unpack_ret;
-        decodeMsgSize = b64_get_decoded_buffer_size(strlen(pString));
-        decodeMsg = (char *) malloc(sizeof(char) * decodeMsgSize);
-        size = b64_decode( pString, strlen(pString), decodeMsg );
-        MeshInfo("base64 decoded data contains %d bytes\n",size);
-
-        msgpack_zone_init(&mempool, 2048);
-        unpack_ret = msgpack_unpack(decodeMsg, size, NULL, &mempool, &deserialized);
-
-        switch(unpack_ret)
-        {
-            case MSGPACK_UNPACK_SUCCESS:
-                MeshInfo("MSGPACK_UNPACK_SUCCESS :%d\n",unpack_ret);
-                break;
-            case MSGPACK_UNPACK_EXTRA_BYTES:
-                MeshInfo("MSGPACK_UNPACK_EXTRA_BYTES :%d\n",unpack_ret);
-                break;
-            case MSGPACK_UNPACK_CONTINUE:
-                MeshInfo("MSGPACK_UNPACK_CONTINUE :%d\n",unpack_ret);
-                break;
-            case MSGPACK_UNPACK_PARSE_ERROR:
-                MeshInfo("MSGPACK_UNPACK_PARSE_ERROR :%d\n",unpack_ret);
-                break;
-            case MSGPACK_UNPACK_NOMEM_ERROR:
-                MeshInfo("MSGPACK_UNPACK_NOMEM_ERROR :%d\n",unpack_ret);
-                break;
-            default:
-                MeshInfo("Message Pack decode failed with error: %d\n", unpack_ret);
-        }
-
-        msgpack_zone_destroy(&mempool);
-        MeshInfo("End message pack decode\n");
-        //End of msgpack decoding
-
-        if(unpack_ret == MSGPACK_UNPACK_SUCCESS)
-        {
-            meshbackhauldoc_t *mb;
-            mb = meshbackhauldoc_convert( decodeMsg, size+1 );
-
-            if ( decodeMsg )
-            {
-                free(decodeMsg);
-                decodeMsg = NULL;
-            }
-
-            if (NULL != mb)
-            {
-                MeshInfo("mb->mesh_enable is %s\n", (1 == mb->mesh_enable)?"true":"false");
-                MeshInfo("mb->ethernetbackhaul_enable is %s\n", (1 == mb->ethernetbackhaul_enable)?"true":"false");
-                MeshInfo("mb->subdoc_name is %s\n", mb->subdoc_name);
-                MeshInfo("mb->version is %lu\n", (unsigned long)mb->version);
-                MeshInfo("mb->transaction_id is %d\n", mb->transaction_id);
-                MeshInfo("Mesh configuration received\n");
-
-                execData *execDataMb = NULL ;
-
-                execDataMb = (execData*) malloc (sizeof(execData));
-
-                if ( execDataMb != NULL )
-                {
-                    memset(execDataMb, 0, sizeof(execData));
-
-                    execDataMb->txid = mb->transaction_id;
-                    execDataMb->version = mb->version;
-
-                    strncpy(execDataMb->subdoc_name,"mesh",sizeof(execDataMb->subdoc_name)-1);
-                    execDataMb->user_data = (void*) mb ;
-                    execDataMb->calcTimeout = webconf_Mesh_Timeout_Handler; ;
-                    execDataMb->executeBlobRequest = Process_MB_WebConfigRequest;
-                    execDataMb->rollbackFunc = rollback_MeshBackhaul ;
-                    execDataMb->freeResources = freeResources_MeshBackhaul ;
-
-                    PushBlobRequest(execDataMb);
-
-                    MeshInfo("PushBlobRequest complete\n");
-
-                    return TRUE;
-
-                }
-                else
-                {
-                    MeshInfo("execData memory allocation failed\n");
-                    meshbackhauldoc_destroy( mb );
-
-                    return FALSE;
-
-                }
-            }
-            return TRUE;
-
-        }
-        else
-        {
-            if ( decodeMsg )
-            {
-                free(decodeMsg);
-                decodeMsg = NULL;
-            }
-            MeshInfo("Corrupted Mesh value\n");
-            return FALSE;
-        }
-
-        return TRUE;
+        mesh_msgpack_decode(pString,2500, MESH);
+        MeshInfo("Received Mesh Data\n");
+        return ret;
     }
-
     MeshError("Unsupported Namespace:%s\n", ParamName);
 
     return FALSE;
 }
 
+/**********************************************************************
+
+    caller:     owner of this object
+
+    prototype:
+
+        BOOL
+        MWO_SetParamStringValue
+            (
+                ANSC_HANDLE                 hInsContext,
+                char*                       ParamName,
+                 int                         pString
+            );
+
+    description:
+
+       This function is called to set string parameter value;
+
+    argument:   ANSC_HANDLE                 hInsContext,
+                The instance handle;
+
+                char*                       ParamName,
+                The parameter name;
+
+                char*                       pString
+                The updated string value;
+
+    return:     TRUE if succeeded.
+
+**********************************************************************/
+// Currently, SET is not supported for Name parameter
+
+BOOL
+MWO_SetParamStringValue
+    (
+        ANSC_HANDLE                 hInsContext,
+        char*                       ParamName,
+        char*                       pString
+    )
+{
+    UNREFERENCED_PARAMETER(hInsContext);
+    BOOL ret = TRUE;
+
+    if (strcmp(ParamName, "Configs") == 0)
+    {
+        MeshInfo("Received Configs\n");
+        mesh_msgpack_decode(pString,500,CONFIGS);
+        return ret;
+    }
+
+    if (strcmp(ParamName, "SteeringProfileData") == 0)
+    {
+        MeshInfo("Received SteeringProfileData\n");
+        mesh_msgpack_decode(pString,3500,STEERING_PROFILE_DEFAULT);
+        return ret;
+    }
+
+    if(strcmp(ParamName, "ClientProfileData") == 0)
+    {
+        MeshInfo("Received ClientProfileData\n");
+        mesh_msgpack_decode(pString,5000,DEVICE);
+        return ret;
+    }
+    MeshError("Unsupported Namespace:%s\n", ParamName);
+
+    return FALSE;
+}
 
 /**********************************************************************  
 
