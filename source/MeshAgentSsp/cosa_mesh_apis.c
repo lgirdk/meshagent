@@ -2590,6 +2590,38 @@ static bool meshSetOVSSyscfg(bool enable)
     return success;
 }
 
+static bool meshSet_sm_app_Syscfg(bool enable)
+{
+    int i = 0;
+    bool success = false;
+
+    MeshInfo("%s Setting SMAPP disable in syscfg to %d\n", __FUNCTION__, enable);
+    if(Mesh_SysCfgSetStr("sm_app_disable", (enable?"true":"false"), true) != 0)
+    {
+        MeshInfo("Failed to set the SMAPP disable in syscfg, retrying 5 times\n");
+        for(i=0; i<5; i++)
+        {
+            if(!Mesh_SysCfgSetStr("sm_app_disable", (enable?"true":"false"), true))
+            {
+                MeshInfo("SMAPP syscfg set passed in %d attempt\n", i+1);
+                success = true;
+                break;
+            }
+            else
+            {
+                MeshInfo("SMAPP syscfg set retrial failed in %d attempt\n", i+1);
+            }
+        }
+    }
+    else
+    {
+        MeshInfo("SMAPP disable set in the syscfg successfully\n");
+        success = true;
+    }
+
+    return success;
+}
+
 static bool OpensyncSetSyscfg(bool enable)
 {
     int i =0;
@@ -4060,6 +4092,11 @@ bool Mesh_SetOVS(bool enable, bool init, bool commitSyscfg)
     return true;
 }
 
+bool Mesh_SetSMAPP(bool enable)
+{
+   return meshSet_sm_app_Syscfg(enable);
+}
+
 int getMeshErrorCode()
 {
     return meshError;
@@ -4934,7 +4971,8 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
            }
         }
     }
-
+    //setting SM_APP disble state
+      g_pMeshAgent->SM_Disable = Mesh_GetEnabled("sm_app_disable");
     // MeshInfo("Exiting from %s\n",__FUNCTION__);
 }
 

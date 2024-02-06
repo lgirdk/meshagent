@@ -175,6 +175,12 @@ MeshAgent_GetParamBoolValue
         return TRUE;
     }
 
+    if (strcmp(ParamName, "Disable") == 0)
+    {
+        *pBool = g_pMeshAgent->SM_Disable;
+        return TRUE;
+    }
+
     if (strcmp(ParamName, "PodEthernetBackhaulEnable") == 0)
     {
         MeshInfo("Pod ethernet bhaul mode get\n");
@@ -732,6 +738,15 @@ MeshAgent_SetParamBoolValue
 
         Mesh_SetEnabled(bValue, false, true);
         return TRUE;
+    }
+
+    if (strcmp(ParamName, "Disable") == 0)
+    {
+       if(Mesh_SetSMAPP(bValue))
+       {
+          g_pMeshAgent->SM_Disable = bValue;
+          return TRUE; 
+       }
     }
 
     if (strcmp(ParamName, "PodEthernetBackhaulEnable") == 0)
