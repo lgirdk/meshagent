@@ -3223,6 +3223,7 @@ int getRbusStaIfName(unsigned int index)
     int rc = RBUS_ERROR_SUCCESS;
     const char* newValue;
 
+    rbusValue_Init(&value);
     sprintf(name, WIFI_STA_INTERFACE_NAME,index);
     rc = rbus_get(handle, name, &value);
     if (rc != RBUS_ERROR_SUCCESS) {
@@ -3233,6 +3234,7 @@ int getRbusStaIfName(unsigned int index)
     newValue = rbusValue_GetString(value, NULL);
     snprintf(sta.sta_ifname, MAX_IFNAME_LEN, "%s", newValue);
     MeshInfo("Sta if_name = [%s]\n", sta.sta_ifname);
+    rbusValue_Release(value);
 
     return ret;
 }
@@ -3297,6 +3299,7 @@ int getRbusStaBssId(unsigned int index)
     bool ret = true;
     const char* newValue;
 
+    rbusValue_Init(&value);
     sprintf(name, WIFI_STA_BSSID,index);
     rc = rbus_get(handle, name, &value);
     if (rc != RBUS_ERROR_SUCCESS) {
@@ -3308,6 +3311,7 @@ int getRbusStaBssId(unsigned int index)
              *(newValue +1),*(newValue +2),*(newValue +3),*(newValue +4), \
              *(newValue +5));
     MeshInfo("Sta bssid: [%s]\n", sta.bssid);
+    rbusValue_Release(value);
 
     return ret;
 }
