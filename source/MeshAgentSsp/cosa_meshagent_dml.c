@@ -620,6 +620,12 @@ MeshAgent_GetParamUlongValue
         return TRUE;
     }
 
+    if (strcmp(ParamName, "ReinitPeriod") == 0)
+    {
+       *puLong = g_pMeshAgent->meshReinitPeriod;
+       return TRUE;
+    }
+
     MeshWarning("Unsupported parameter '%s'\n", ParamName);
 
     return FALSE;
@@ -1109,6 +1115,12 @@ MeshAgent_SetParamUlongValue
             Mesh_SetMeshWifiOptimizationMode(puLong, false, true);
             return TRUE;
         }
+    }
+
+    if (strcmp(ParamName, "ReinitPeriod") == 0)
+    {
+        Mesh_SetReinitPeriod(puLong, false, true);
+        return TRUE;
     }
 
     MeshWarning("Unsupported parameter '%s'\n", ParamName);

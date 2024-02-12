@@ -44,6 +44,7 @@ _COSA_DATAMODEL_MESHAGENT
     eMeshStateType              meshState;
     eWifiOptimizationMode       meshWifiOptimizationMode;
     UCHAR                       meshWifiOptMqttBroker[128];
+    ULONG                       meshReinitPeriod;
 }
 COSA_DATAMODEL_MESHAGENT,  *PCOSA_DATAMODEL_MESHAGENT;
 

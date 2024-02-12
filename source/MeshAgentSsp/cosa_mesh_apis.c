@@ -350,7 +350,8 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_WIFI_OFF_CHAN_ENABLE,             "MESH_WIFI_OFF_CHAN_ENABLE",            "wifi_OffChannelScanEnable"},
     {MESH_GATEWAY_ENABLE,                   "MESH_GATEWAY_ENABLE",                  "mesh_switch_to_gateway"},
     {MESH_WIFI_OPT_MODE,                    "MESH_WIFI_OPT_MODE",                   "mesh_optimized_mode"},
-    {MESH_WIFI_OPT_BROKER,                  "MESH_WIFI_OPT_BROKER",                 "mwo_mqtt_config"}
+    {MESH_WIFI_OPT_BROKER,                  "MESH_WIFI_OPT_BROKER",                 "mwo_mqtt_config"},
+    {MESH_WIFI_REINIT_PERIOD,               "MESH_WIFI_REINIT_PERIOD",              "hcm_reinit_period"}
 #ifdef ONEWIFI
     ,
     {MESH_SYNC_STATUS,                      "MESH_SYNC_STATUS",                     "mesh_led_status"},
@@ -3962,6 +3963,23 @@ bool Mesh_SetMeshWifiOptimizationMode(eWifiOptimizationMode uValue, bool init, b
     return TRUE;
 }
 
+bool Mesh_SetReinitPeriod(int uValue, bool init, bool commitSyscfg)
+{
+    int mode = uValue;
+
+    // If the enable value is different or this is during setup - make it happen.
+    if (init || Mesh_SysCfgGetInt(meshSyncMsgArr[MESH_WIFI_REINIT_PERIOD].sysStr) != mode)
+    {
+        MeshInfo("%s: meshReinitPeriod: %d\n",__FUNCTION__,uValue);
+        if(commitSyscfg) {
+            if (syscfg_set_u_commit(NULL, meshSyncMsgArr[MESH_WIFI_REINIT_PERIOD].sysStr, uValue) != 0)
+                MeshError("Unable to set %s to :%d,\n",meshSyncMsgArr[MESH_WIFI_REINIT_PERIOD].sysStr,uValue);
+        }
+        g_pMeshAgent->meshReinitPeriod = uValue;
+    }
+    return TRUE;
+}
+
 /**
  * @brief Mesh Wifi Optimization mqtt broker
  *
@@ -4725,6 +4743,19 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
     else
     {
         Mesh_SetMeshWifiOptimizationMqttBroker(out_val,true,false);
+    }
+
+    int reinit_val;
+    reinit_val = Mesh_SysCfgGetInt(meshSyncMsgArr[MESH_WIFI_REINIT_PERIOD].sysStr);
+    MeshInfo("Syscfg get, MESH_WIFI_REINIT_PERIOD : %d\n",reinit_val);
+    if(reinit_val  == 0)
+    {
+        MeshInfo("Syscfg, Setting MESH_WIFI_REINIT_PERIOD to default 2\n");
+        Mesh_SetReinitPeriod(2, true, true);
+    }
+    else
+    {
+        Mesh_SetReinitPeriod(reinit_val, true, false);
     }
 
 #ifdef ONEWIFI

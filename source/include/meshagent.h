@@ -108,6 +108,15 @@ bool Mesh_SetMeshState(eMeshStateType state, bool init, bool commit);
  */
 bool Mesh_SetMeshWifiOptimizationMode(eWifiOptimizationMode uValue, bool init, bool commitSyscfg);
 
+
+/**
+ * @brief Mesh Agent Set Mesh_SetReinitPeriod
+ *
+ * This function will set the Mesh_SetReinitPeriod.
+ * 
+ */
+bool Mesh_SetReinitPeriod(int puLong,bool init, bool commitSyscfg);
+
 /**
  * @brief Mesh Agent Set Mesh mqtt broker
  *
