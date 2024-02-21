@@ -3910,6 +3910,12 @@ bool Mesh_SetMeshWifiOptimizationMode(eWifiOptimizationMode uValue, bool init, b
 {
     int mode = uValue;
 
+    if((mode == MESH_MODE_MONITOR) && (eth_mac_count >0))
+    {
+        MeshInfo("HCM Monitor Mode cant be configured if pod present, Ignoring rfc change\n");
+        return TRUE;
+    }
+
     // If the enable value is different or this is during setup - make it happen.
     if (init || Mesh_SysCfgGetInt(meshSyncMsgArr[MESH_WIFI_OPT_MODE].sysStr) != mode)
     {
