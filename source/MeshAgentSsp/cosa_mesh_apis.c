@@ -898,24 +898,30 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
     break;
     case MESH_ETHERNET_MAC_LIST:
     {
-      int rc = -1;
+        int rc = -1;
 
-      if(meshAddPod(rxMsg.data.ethMac.mac) == false) {
-          MeshError("Failed to add pod to state list\n");
-      }
+        if(meshAddPod(rxMsg.data.ethMac.mac) == false) {
+            MeshError("Failed to add pod to state list\n");
+        }
 
-      if( g_pMeshAgent->PodEthernetBackhaulEnable)
-      {
-          rc= v_secure_system( ETHBHAUL_SWITCH " -eb_enable");
-       if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
-       {
-        MeshError("%s -eb_enable : Ethernet backhaul enable failed = %d\n", ETHBHAUL_SWITCH, WEXITSTATUS(rc));
-       }
-       Mesh_SendEthernetMac(rxMsg.data.ethMac.mac);
-      }
-      else
-       MeshInfo("Ethernet bhaul disabled, ignoring the Pod mac update\n");
-      Mesh_PodAddress( rxMsg.data.ethMac.mac, TRUE);
+        if( g_pMeshAgent->PodEthernetBackhaulEnable)
+        {
+            rc= v_secure_system( ETHBHAUL_SWITCH " -eb_enable");
+            if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+            {
+                MeshError("%s -eb_enable : Ethernet backhaul enable failed = %d\n", ETHBHAUL_SWITCH, WEXITSTATUS(rc));
+            }
+            Mesh_SendEthernetMac(rxMsg.data.ethMac.mac);
+        }
+        else
+            MeshInfo("Ethernet bhaul disabled, ignoring the Pod mac update\n");
+
+        Mesh_PodAddress( rxMsg.data.ethMac.mac, TRUE);
+        if((g_pMeshAgent->meshWifiOptimizationMode == MESH_MODE_MONITOR) && (eth_mac_count >0))
+        {
+            Mesh_SetMeshWifiOptimizationMode(MESH_MODE_DISABLE, false, true);
+            MeshInfo("HCM Monitor Mode cant be configured if pod present, Changing rfc to Disabled\n");
+        }
     }
     break;
 #ifdef WAN_FAILOVER_SUPPORTED
