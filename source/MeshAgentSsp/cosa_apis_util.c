@@ -67,6 +67,16 @@ LedColor_Msg  meshLedColorArr[] = {
 #define UNIT_ACTIVATED_SYSCFG         "unit_activated"
 #endif
 
+#if defined (_LG_MV2_PLUS_)
+#define OPENSYNC_INIT_SCRIPT "/usr/opensync/scripts/opensync.init"
+#define OPENSYNC_INIT_START "pre-start"
+#define OPENSYNC_INIT_STOP "post-stop"
+#else
+#define OPENSYNC_INIT_SCRIPT "/usr/plume/scripts/managers.init"
+#define OPENSYNC_INIT_START "start"
+#define OPENSYNC_INIT_STOP "stop"
+#endif
+
 #define MIN_BUFF                      128
 #define MAX_BUFF                      1024
 extern int sysevent_fd_gs;
@@ -227,22 +237,14 @@ int svcagt_get_service_state (const char *svc_name)
 int svcagt_set_service_state (const char *svc_name, bool state)
 {
 	int exit_code = 0;
-	const char *start_stop_msg = NULL;
 	const char *cmd_option = NULL;
 
-	if (state) {
-		start_stop_msg = "Starting";
-		cmd_option = "start";
-	} else {
-		start_stop_msg = "Stopping";
-		cmd_option = "stop";
-	}
+	MeshInfo("%s %s\n", state ? "Starting" : "Stopping", svc_name);
 
-	MeshInfo("%s %s\n", start_stop_msg, svc_name);
-
-	exit_code = v_secure_system ("/usr/plume/scripts/managers.init %s", cmd_option);
+	cmd_option = state ? OPENSYNC_INIT_START : OPENSYNC_INIT_STOP;
+	exit_code = v_secure_system (OPENSYNC_INIT_SCRIPT " %s", cmd_option);
 	if (exit_code != 0)
-		CcspTraceError(("Command /usr/plume/scripts/managers.init %s failed with exit %d, errno %s\n", cmd_option, exit_code, strerror(errno)));
+		CcspTraceError(("Command " OPENSYNC_INIT_SCRIPT " %s failed with exit %d, errno %s\n", cmd_option, exit_code, strerror(errno)));
 	return exit_code;
 }
 
@@ -250,9 +252,9 @@ int svcagt_set_service_restart (const char *svc_name)
 {
         int exit_code = 0;
 
-        exit_code = v_secure_system ("/usr/plume/scripts/managers.init %s", "start");
+        exit_code = v_secure_system (OPENSYNC_INIT_SCRIPT " %s", OPENSYNC_INIT_START);
         if (exit_code != 0)
-                CcspTraceError(("Command /usr/plume/scripts/managers.init %s failed with exit %d, errno %s\n", "start", exit_code, strerror(errno)));
+                CcspTraceError(("Command " OPENSYNC_INIT_SCRIPT " %s failed with exit %d, errno %s\n", OPENSYNC_INIT_START, exit_code, strerror(errno)));
         return exit_code;
 }
 
