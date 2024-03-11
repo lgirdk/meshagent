@@ -31,7 +31,8 @@
 /*----------------------------------------------------------------------------*/
 #define MB_ERROR                   -1
 #define STEERING_CONFIG_FILE       "/nvram/steering.json"
-#define DEVICE_CONFIG_FILE       "/nvram/device_profile.json"
+#define DEVICE_CONFIG_FILE         "/nvram/device_profile.json"
+#define INTERFERENCE_CONFIG_FILE   "/nvram/mwo/sa/lts_deployment_stats"
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
@@ -46,7 +47,8 @@ meshblob_name_t  meshBlobNameArr[] = {
     {STEERING_PROFILE_DEFAULT,         "meshsteeringprofiles"},
     {DEVICE,                           "DeviceToSteeringProfile"},
     {WIFI_CONFIG,                      "wificonfig_stat"},
-    {CONFIGS,                          "mwoconfigs"}
+    {CONFIGS,                          "mwoconfigs"},
+    {INTERFERENCE,                     "interference"}
 };
 
 static c_item_t map_ovsdb_reject_detection[] = {
@@ -82,6 +84,14 @@ static c_item_t map_mwo_configs_type[] = {
     C_ITEM_STR(TYPE_INT,                 "int")
 };
 
+static c_item_t map_ovsdb_radio_type[] = {
+    C_ITEM_STR(RADIO_TYPE_NONE,      "none"),
+    C_ITEM_STR(RADIO_TYPE_2G,        "2.4G"),
+    C_ITEM_STR(RADIO_TYPE_5G,        "5G"),
+    C_ITEM_STR(RADIO_TYPE_5GL,       "5GL"),
+    C_ITEM_STR(RADIO_TYPE_5GU,       "5GU"),
+    C_ITEM_STR(RADIO_TYPE_6G,         "6G")
+};
 
 /*----------------------------------------------------------------------------*/
 /*                             Function Prototypes                            */
@@ -151,9 +161,8 @@ void* helper_convert( const void *buf, size_t len,
                 msgpack_object *transaction_id;
                 if( NULL != wrapper && 0 != strcmp(wrapper,"parameters"))
                 {
-                    if(0 == strcmp(wrapper,"DeviceToSteeringProfile"))
-                        inner =  &msg.data.via.map.ptr->val;
-                    else if(0 == strcmp(wrapper,"mwoconfigs"))
+                    if((strcmp(wrapper,"DeviceToSteeringProfile")== 0) ||
+                       (strcmp(wrapper,"mwoconfigs") == 0) ||  (strcmp(wrapper,"interference") == 0))
                         inner =  &msg.data.via.map.ptr->val;
                     else
                         inner = __finder( wrapper, expect_type, &msg.data.via.map );
@@ -351,12 +360,49 @@ void save_device_profile_tofile(dp_doc_t *dp)
 
     cJSON_AddItemToObject(root, "clienttosteeringprofile", clienttosteeringprofile);
 
-
     for (int i = 0; i < dp->count; i++) {
         cJSON_AddItemToArray(clienttosteeringprofile, create_profile_object((dp->clients+i)));
     }
     char *string = cJSON_PrintUnformatted(root);
     FILE *file = fopen(DEVICE_CONFIG_FILE, "w");
+
+    if (file == NULL) {
+        MeshInfo("Error opening file!\n");
+        return ;
+    }
+
+    fprintf(file, "%s", string);
+
+    fclose(file);
+
+    free(string);
+    cJSON_Delete(root);
+}
+
+cJSON* create_ai_profile_object(interference_t    *data)
+{
+    cJSON *profile = cJSON_CreateObject();
+    cJSON_AddNumberToObject(profile, "channel",data->channel);
+    cJSON_AddStringToObject(profile, "radio_type", c_get_str_by_key(map_ovsdb_radio_type,data->radio_type));
+    cJSON_AddNumberToObject(profile, "tot_active_if_min", data->tot_active_interf_min);
+    cJSON_AddNumberToObject(profile, "tot_idle_if_min", data->tot_idle_interf_min);
+    cJSON_AddNumberToObject(profile, "avg_active_if", data->avg_active_interf);
+    cJSON_AddNumberToObject(profile, "avg_idle_if", data->avg_idle_interf);
+    return profile;
+}
+
+void save_ai_profile_tofile(ai_doc_t *ai)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON *interference = cJSON_CreateArray();
+
+    cJSON_AddItemToObject(root, "interference", interference);
+
+    for (int i = 0; i < ai->count; i++) {
+        cJSON_AddItemToArray(interference, create_ai_profile_object((ai->ai_data+i)));
+    }
+    char *string = cJSON_PrintUnformatted(root);
+    FILE *file = fopen(INTERFERENCE_CONFIG_FILE, "w");
 
     if (file == NULL) {
         MeshInfo("Error opening file!\n");
@@ -667,6 +713,11 @@ void* blob_data_convert( const void *buf, size_t len, eBlobType blob_type )
             blob_size = sizeof(configs_doc_t);
             process = process_configsdoc;
             destroy = destroy_configsdoc;
+        break;
+        case INTERFERENCE:
+            blob_size = sizeof(ai_doc_t);
+            process = process_aidoc;
+            destroy = destroy_aidoc;
         break;
         default:
         break;
@@ -1238,6 +1289,89 @@ int process_dp_client(DpClientSteering_t *dp_client, msgpack_object_map *map)
     }
     return 0;
 }
+
+int process_ai(interference_t *i, msgpack_object_map *map )
+{
+    int left = map->size;
+    char              *val;
+    c_item_t          *item;
+
+    msgpack_object_kv *p;
+    MeshInfo("Number of ai parameters = %d\n",left);
+    p = map->ptr;
+    while( 0 < left--)
+    {
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+           if( MSGPACK_OBJECT_STR == p->val.type )
+           {
+               if( 0 == match(p, "radio_type") )
+               {
+                   val = strndup( p->val.via.str.ptr, p->val.via.str.size);
+                   if(val == NULL){
+                       MeshError("Memory allocation failed for radio_type value");
+                   } else {
+                       item = c_get_item_by_str(map_ovsdb_radio_type, val);
+                       if (item) {
+                           i->radio_type = (radio_type_t)item->key;
+                       } else {
+                           MeshError("Unknown radio type %s",val);
+                       }
+                       if(val)
+                           free(val);
+                   }
+               }
+
+               if( 0 == match(p, "tot_active_if_min") )
+               {
+                   val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                   if(val) {
+                       i->tot_active_interf_min = atof(val);
+                       free(val);
+                   }
+               }
+
+               if( 0 == match(p, "tot_idle_if_min") )
+               {
+                   val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                   if(val) {
+                       i->tot_idle_interf_min = atof(val);
+                       free(val);
+                   }
+               }
+
+               if( 0 == match(p, "avg_active_if") )
+               {
+                   val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                   if(val) {
+                       i->avg_active_interf = atof(val);
+                       free(val);
+                   }
+               }
+
+               if( 0 == match(p, "avg_idle_if") )
+               {
+                   val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                   if(val) {
+                       i->avg_idle_interf = atof(val);
+                       free(val);
+                   }
+               }
+            }
+            else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            {
+                if( 0 == match(p, "channel") )
+                {
+                    i->channel = (int) p->val.via.u64;
+                    MeshInfo("interferencee: channel = %d\n",i->channel);
+                }
+            }
+        }
+        p++;
+    }
+    return 0;
+}
+
 
 int process_configs (configs_t *c, msgpack_object_map *map )
 {
@@ -2240,6 +2374,25 @@ int process_bs_11kvdoc (void *data,int num, ...)
     return 0;
 }
 
+void destroy_aidoc(void *data)
+{
+    ai_doc_t *ai = (ai_doc_t *) data;
+
+    if(NULL != ai)
+    {
+        if(NULL != ai->subdoc_name)
+        {
+            free(ai->subdoc_name);
+            ai->subdoc_name = NULL;
+        }
+        if(NULL != ai->ai_data)
+        {
+            free(ai->ai_data);
+            ai->ai_data = NULL;
+        }
+    }
+}
+
 void destroy_configsdoc(void *data)
 {
     configs_doc_t *configs = (configs_doc_t *) data;
@@ -2448,6 +2601,45 @@ int process_configsdoc( void  *data,int num, ... )
         if( 0 != process_configs(&co->config_data[i], &array->ptr[i].via.map) )
         {
             MeshInfo("process_configsdoc failed\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int process_aidoc( void  *data,int num, ... )
+{
+    //To access the variable arguments use va_list
+    va_list valist;
+    int i;
+
+    ai_doc_t *ai = (ai_doc_t *)data;
+
+    va_start(valist, num);//start of variable argument loop
+
+    msgpack_object *obj = va_arg(valist, msgpack_object *);
+    msgpack_object_array *array = &obj->via.array;
+
+    msgpack_object *obj1 = va_arg(valist, msgpack_object *);
+    ai->subdoc_name = strndup( obj1->via.str.ptr, obj1->via.str.size );
+
+    msgpack_object *obj2 = va_arg(valist, msgpack_object *);
+    ai->version = (uint32_t) obj2->via.u64;
+
+    msgpack_object *obj3 = va_arg(valist, msgpack_object *);
+
+    ai->transaction_id = (uint16_t) obj3->via.u64;
+    va_end(valist);//End of variable argument loop
+
+    ai->count = array->size;
+    ai->ai_data = malloc( sizeof(interference_t)*ai->count);
+    memset(ai->ai_data, 0, (sizeof(interference_t)*ai->count));
+    MeshInfo("ai_doc count : %d\n",ai->count);
+    for( i = 0; i < ai->count; i++ )
+    {
+        if( 0 != process_ai(&ai->ai_data[i], &array->ptr[i].via.map) )
+        {
+            MeshInfo("process_ai failed\n");
             return -1;
         }
     }

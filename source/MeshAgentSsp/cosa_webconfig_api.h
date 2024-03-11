@@ -115,7 +115,8 @@ typedef enum {
     STEERING_PROFILE_DEFAULT,
     DEVICE,
     WIFI_CONFIG,
-    CONFIGS
+    CONFIGS,
+    INTERFERENCE
 }eBlobType;
 
 typedef enum {
@@ -123,6 +124,16 @@ typedef enum {
     TYPE_BOOLEAN,
     TYPE_INT
 } eValueType;
+
+typedef enum
+{
+    RADIO_TYPE_NONE = 0,
+    RADIO_TYPE_2G,
+    RADIO_TYPE_5G,
+    RADIO_TYPE_5GL,
+    RADIO_TYPE_5GU,
+    RADIO_TYPE_6G
+} radio_type_t;
 
 typedef struct {
     int32_t         value;
@@ -420,6 +431,24 @@ typedef struct {
     bool mesh_enable;
     bool ethernetbackhaul_enable;
 } t_cache;
+
+typedef struct {
+    radio_type_t radio_type;
+    int          channel;
+    float        tot_active_interf_min;
+    float        tot_idle_interf_min;
+    float        avg_active_interf;
+    float        avg_idle_interf;
+}interference_t;
+
+typedef struct {
+    char *            subdoc_name;
+    uint32_t          version;
+    uint16_t          transaction_id;
+    int               count;
+    interference_t    *ai_data;
+} ai_doc_t;
+
 
 uint32_t getBlobVersion(char* subdoc);
 int setBlobVersion(char* subdoc,uint32_t version);

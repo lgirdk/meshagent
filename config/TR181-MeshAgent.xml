@@ -251,6 +251,12 @@
                             </functions>
                             <parameters>
                                 <parameter>
+                                    <name>AugmentedInterference</name>
+                                    <type>string</type>
+                                    <syntax>string</syntax>
+                                    <writable>true</writable>
+                                </parameter>
+                                <parameter>
                                     <name>Configs</name>
                                     <type>string</type>
                                     <syntax>string</syntax>

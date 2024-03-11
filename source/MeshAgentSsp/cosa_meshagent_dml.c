@@ -388,6 +388,13 @@ MWO_GetParamStringValue
         return 0;
     }
 
+    if(strcmp(ParamName, "AugmentedInterference") == 0)
+    {
+        MeshInfo("AugmentedInterference Get Not supported\n");
+        strcpy(pValue, "");
+        return 0;
+    }
+
     MeshError("Unsupported Namespace:%s size:%ln\n", ParamName,pUlSize);
 
     return -1;
@@ -1391,6 +1398,13 @@ MWO_SetParamStringValue
     {
         MeshInfo("Received Configs\n");
         mesh_msgpack_decode(pString,500,CONFIGS);
+        return ret;
+    }
+
+    if (strcmp(ParamName, "AugmentedInterference") == 0)
+    {
+        MeshInfo("Received AugmentedInterference Configs\n");
+        mesh_msgpack_decode(pString,6000,INTERFERENCE);
         return ret;
     }
 

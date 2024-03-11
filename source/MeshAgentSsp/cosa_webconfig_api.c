@@ -54,6 +54,9 @@
        else if (blob_type == CONFIGS){                                 \
            CALC_TIMEOUT_CALLBACK(mwoconfigs);                          \
        }                                                               \
+       else if (blob_type == INTERFERENCE){                            \
+           CALC_TIMEOUT_CALLBACK(interference);                        \
+       }                                                               \
     } while (0)
 
 #define EXECUTE_TIMEOUT(blob_type)                                     \
@@ -66,6 +69,8 @@
            EXECUTE_TIMEOUT_CALLBACK(devicetosteerprof);                \
        else if (blob_type == CONFIGS)                                  \
            EXECUTE_TIMEOUT_CALLBACK(mwoconfigs);                       \
+       else if (blob_type == INTERFERENCE)                             \
+           EXECUTE_TIMEOUT_CALLBACK(interference);                     \
        } while (0)
 
 #define ROLLBACK_TIMEOUT(blob_type)                                    \
@@ -78,6 +83,8 @@
            ROLLBACK_TIMEOUT_CALLBACK(devicetosteerprof);               \
        else if (blob_type == CONFIGS)                                  \
            ROLLBACK_TIMEOUT_CALLBACK(mwoconfigs);                      \
+       else if (blob_type == INTERFERENCE)                             \
+           ROLLBACK_TIMEOUT_CALLBACK(interference);                    \
        } while (0)
 
 #define FREE_TIMEOUT(blob_type)                                        \
@@ -90,6 +97,8 @@
            FREE_TIMEOUT_CALLBACK(devicetosteerprof);                   \
        else if (blob_type == CONFIGS)                                  \
            FREE_TIMEOUT_CALLBACK(mwoconfigs);                          \
+       else if (blob_type == INTERFERENCE)                             \
+           FREE_TIMEOUT_CALLBACK(interference);                        \
        } while (0)
 
 pErr mesh_execute_timeout_handler(void *Data);
@@ -111,6 +120,11 @@ pErr mwoconfigs_execute_timeout_handler(void *Data);
 size_t mwoconfigs_calc_timeout_handler (size_t count);
 int mwoconfigs_rollback_timeout_handler();
 void mwoconfigs_free_timeout_handler(void *arg);
+
+pErr interference_execute_timeout_handler(void *Data);
+size_t interference_calc_timeout_handler (size_t count);
+int interference_rollback_timeout_handler();
+void interference_free_timeout_handler(void *arg);
 
 typedef size_t (*calcTimeout_fn_t) (size_t);
 typedef pErr (*executeBlobRequest_fn_t) (void*);
@@ -190,6 +204,15 @@ void configs_blob_dump(configs_doc_t *configs)
     MeshInfo("The transaction id is %d\n", configs->transaction_id);
     MeshInfo("The version is %lu\n", (long)configs->version);
     MeshInfo("The subdoc_name is %s\n", configs->subdoc_name);
+}
+
+void ai_blob_dump(ai_doc_t *ai)
+{
+    save_ai_profile_tofile(ai);
+    MeshInfo("interference blob received\n");
+    MeshInfo("The transaction id is %d\n", ai->transaction_id);
+    MeshInfo("The version is %lu\n", (long)ai->version);
+    MeshInfo("The subdoc_name is %s\n", ai->subdoc_name);
 }
 
 bool  mesh_msgpack_decode(char* pString, int decode_size, eBlobType type)
@@ -329,6 +352,20 @@ bool  mesh_msgpack_decode(char* pString, int decode_size, eBlobType type)
             {
                 MeshInfo("mwoconfigs failed\n");
                 ret = FALSE;
+            }
+        }
+        else if (type == INTERFERENCE)
+        {
+            ai_doc_t *ai = NULL;
+            ai = (ai_doc_t *) blob_data_convert( decodeMsg, size+1,INTERFERENCE);
+            if (NULL != ai)
+            {
+                ai_blob_dump(ai);
+                if(!push_blob_request("interference",ai,ai->version,ai->transaction_id,INTERFERENCE))
+                {
+                    destroy_aidoc((void *)ai);
+                    ret = FALSE;
+                }
             }
         }
     }
@@ -534,7 +571,7 @@ size_t devicetosteerprof_calc_timeout_handler (size_t count)
 pErr devicetosteerprof_execute_timeout_handler(void *Data)
 {
     dp_doc_t *dp = (dp_doc_t *)Data;
-     pErr execRetVal = NULL;
+    pErr execRetVal = NULL;
 
     if (dp == NULL)
          MeshError("%s : malloc failed\n",__FUNCTION__);
@@ -570,6 +607,58 @@ void devicetosteerprof_free_timeout_handler(void *arg)
         if ( rpm != NULL )
         {
             destroy_dpdoc(rpm);
+        }
+        free(blob_exec_data);
+        blob_exec_data = NULL ;
+    }
+    return;
+}
+
+size_t interference_calc_timeout_handler (size_t count)
+{
+    MeshInfo("In interference_calc_timeout_handler numOfEntried = %lu\n", (long unsigned int) count);
+    return MESH_DEFAULT_TIMEOUT;
+}
+
+pErr interference_execute_timeout_handler(void *Data)
+{
+    ai_doc_t *ai = (ai_doc_t *)Data;
+    pErr execRetVal = NULL;
+
+    if (ai == NULL)
+         MeshError("%s : malloc failed\n",__FUNCTION__);
+
+    execRetVal = (pErr) malloc (sizeof(Err));
+    if (execRetVal == NULL )
+    {
+        MeshError("%s : malloc failed\n",__FUNCTION__);
+        return execRetVal;
+    }
+
+    memset(execRetVal,0,sizeof(Err));
+    execRetVal->ErrorCode = BLOB_EXEC_SUCCESS;
+    snprintf(execRetVal->ErrorMsg,sizeof(execRetVal->ErrorMsg) - 1, "%s","enabled");
+    return execRetVal;
+}
+
+int interference_rollback_timeout_handler()
+{
+    // return 0 to notify framework when rollback is success
+    MeshInfo(" Entering %s \n",__FUNCTION__);
+    return 0 ;
+}
+
+void interference_free_timeout_handler(void *arg)
+{
+    MeshInfo(" Entering %s \n",__FUNCTION__);
+    execData *blob_exec_data  = (execData*) arg;
+
+    if ( blob_exec_data != NULL )
+    {
+        ai_doc_t *ai = (ai_doc_t *) blob_exec_data->user_data;
+        if ( ai != NULL )
+        {
+            destroy_aidoc(ai);
         }
         free(blob_exec_data);
         blob_exec_data = NULL ;
