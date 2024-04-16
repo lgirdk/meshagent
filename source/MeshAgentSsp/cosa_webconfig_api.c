@@ -57,6 +57,9 @@
        else if (blob_type == INTERFERENCE){                            \
            CALC_TIMEOUT_CALLBACK(interference);                        \
        }                                                               \
+       else if (blob_type == WIFI_MOTION){                             \
+           CALC_TIMEOUT_CALLBACK(wifimotionsettings);                  \
+       }                                                               \
     } while (0)
 
 #define EXECUTE_TIMEOUT(blob_type)                                     \
@@ -71,6 +74,8 @@
            EXECUTE_TIMEOUT_CALLBACK(mwoconfigs);                       \
        else if (blob_type == INTERFERENCE)                             \
            EXECUTE_TIMEOUT_CALLBACK(interference);                     \
+       else if (blob_type == WIFI_MOTION)                              \
+           EXECUTE_TIMEOUT_CALLBACK(wifimotionsettings);               \
        } while (0)
 
 #define ROLLBACK_TIMEOUT(blob_type)                                    \
@@ -85,6 +90,8 @@
            ROLLBACK_TIMEOUT_CALLBACK(mwoconfigs);                      \
        else if (blob_type == INTERFERENCE)                             \
            ROLLBACK_TIMEOUT_CALLBACK(interference);                    \
+       else if (blob_type == WIFI_MOTION)                              \
+           ROLLBACK_TIMEOUT_CALLBACK(wifimotionsettings);              \
        } while (0)
 
 #define FREE_TIMEOUT(blob_type)                                        \
@@ -99,6 +106,8 @@
            FREE_TIMEOUT_CALLBACK(mwoconfigs);                          \
        else if (blob_type == INTERFERENCE)                             \
            FREE_TIMEOUT_CALLBACK(interference);                        \
+       else if (blob_type == WIFI_MOTION)                              \
+           FREE_TIMEOUT_CALLBACK(wifimotionsettings);                  \
        } while (0)
 
 pErr mesh_execute_timeout_handler(void *Data);
@@ -125,6 +134,11 @@ pErr interference_execute_timeout_handler(void *Data);
 size_t interference_calc_timeout_handler (size_t count);
 int interference_rollback_timeout_handler();
 void interference_free_timeout_handler(void *arg);
+
+pErr wifimotionsettings_execute_timeout_handler(void *Data);
+size_t wifimotionsettings_calc_timeout_handler (size_t count);
+int wifimotionsettings_rollback_timeout_handler();
+void wifimotionsettings_free_timeout_handler(void *arg);
 
 typedef size_t (*calcTimeout_fn_t) (size_t);
 typedef pErr (*executeBlobRequest_fn_t) (void*);
@@ -178,6 +192,16 @@ void mesh_blob_dump(meshbackhauldoc_t *mb)
     MeshInfo("mb->subdoc_name is %s\n", mb->subdoc_name);
     MeshInfo("mb->version is %lu\n", (unsigned long)mb->version);
     MeshInfo("mb->transaction_id is %d\n", mb->transaction_id);
+}
+
+void wfm_blob_dump(wfm_doc_t *wfm)
+{
+    save_wfm_settings_tofile(wfm);
+    MeshInfo("Wifi Motion configuration received\n");
+    MeshInfo("wfm->wfm_enable is %s\n", (1 == wfm->wfm_enable)?"true":"false");
+    MeshInfo("wfm->subdoc_name is %s\n", wfm->subdoc_name);
+    MeshInfo("wfm->version is %lu\n", (unsigned long)wfm->version);
+    MeshInfo("wfm->transaction_id is %d\n", wfm->transaction_id);
 }
 
 void steeringprofile_blob_dump(sp_doc_t *sp)
@@ -368,6 +392,35 @@ bool  mesh_msgpack_decode(char* pString, int decode_size, eBlobType type)
                 }
             }
         }
+        else if (type == WIFI_MOTION)
+        {
+            wfm_doc_t *wfm = NULL;
+            wfm = (wfm_doc_t *) blob_data_convert( decodeMsg, size+1,WIFI_MOTION);
+            if (NULL != wfm)
+            {
+                wfm_blob_dump(wfm);
+                if(!push_blob_request("wifimotionsettings",wfm,wfm->version,wfm->transaction_id,WIFI_MOTION))
+                {
+                    destroy_wfmdoc((void *)wfm);
+                    ret = FALSE;
+                }
+                else
+                {
+                    g_pMeshAgent->meshwfmSettingsReceived = true;
+                    char* payload = wfm_event_data_get();
+                    if (payload)
+                    {
+                        publishRBUSEvent(WFM_CONFIGURATION, (void *)payload,handle);
+                        free(payload);
+                    }
+                }
+            }
+            else
+            {
+                MeshInfo("wifimotionsettings failed\n");
+                ret = FALSE;
+            }
+        }
     }
     else
     {
@@ -485,7 +538,7 @@ int setBlobVersion(char* subdoc,uint32_t version)
 
 void webConfigFrameworkInit()
 {
-    char *sub_docs[SUBDOC_COUNT+1]= {"mesh","meshsteeringprofiles","clienttosteeringprofile","wifistatsconfig","mwoconfigs",(char *) 0 };
+    char *sub_docs[SUBDOC_COUNT+1]= {"mesh","meshsteeringprofiles","clienttosteeringprofile","wifistatsconfig","mwoconfigs","interference","wifimotionsettings",(char *) 0 };
     int i;
 
     blobRegInfo *blobData;
@@ -574,7 +627,10 @@ pErr devicetosteerprof_execute_timeout_handler(void *Data)
     pErr execRetVal = NULL;
 
     if (dp == NULL)
-         MeshError("%s : malloc failed\n",__FUNCTION__);
+    {
+        MeshError("%s : Data is empty\n",__FUNCTION__);
+        return execRetVal;
+    }
 
     execRetVal = (pErr) malloc (sizeof(Err));
     if (execRetVal == NULL )
@@ -592,13 +648,13 @@ pErr devicetosteerprof_execute_timeout_handler(void *Data)
 int devicetosteerprof_rollback_timeout_handler()
 {
     // return 0 to notify framework when rollback is success
-    MeshInfo(" Entering %s \n",__FUNCTION__);
+    MeshInfo("Entering %s \n",__FUNCTION__);
     return 0 ;
 }
 
 void devicetosteerprof_free_timeout_handler(void *arg)
 {
-    MeshInfo(" Entering %s \n",__FUNCTION__);
+    MeshInfo("Entering %s \n",__FUNCTION__);
     execData *blob_exec_data  = (execData*) arg;
 
     if ( blob_exec_data != NULL )
@@ -673,7 +729,10 @@ pErr mwoconfigs_execute_timeout_handler(void *Data)
     pErr execRetVal = NULL;
 
     if (configs == NULL)
-         MeshError("%s : dp is null\n",__FUNCTION__);
+    {
+        MeshError("%s : Data is empty\n",__FUNCTION__);
+        return execRetVal;
+    }
 
     execRetVal = (pErr) malloc (sizeof(Err));
     if (execRetVal == NULL )
@@ -739,13 +798,79 @@ void mwoconfigs_free_timeout_handler(void *arg)
     return;
 }
 
+/* Callback function to rollback when wfm  blob execution fails */
+int wifimotionsettings_rollback_timeout_handler()
+{
+    // return 0 to notify framework when rollback is success
+    MeshInfo(" Entering %s \n",__FUNCTION__);
+
+    return 0 ;
+}
+
+void wifimotionsettings_free_timeout_handler(void *arg)
+{
+    MeshInfo(" Entering %s \n",__FUNCTION__);
+    execData *blob_exec_data  = (execData*) arg;
+
+    if ( blob_exec_data != NULL )
+    {
+        wfm_doc_t *wfm = (wfm_doc_t *) blob_exec_data->user_data;
+        if ( wfm != NULL )
+        {
+            destroy_wfmdoc( wfm );
+        }
+        free(blob_exec_data);
+        blob_exec_data = NULL ;
+    }
+}
+
+/**
+ *  Function to calculate timeout value for executing the blob
+ *
+ *  @param numOfEntries Number of Entries of blob
+ *
+ * returns timeout value
+ */
+size_t wifimotionsettings_calc_timeout_handler(size_t numOfEntries)
+{
+    MeshInfo("In wfm_calc_timeout_handler numOfEntried = %lu\n", (long unsigned int) numOfEntries);
+    return MESH_DEFAULT_TIMEOUT;
+}
+
+pErr wifimotionsettings_execute_timeout_handler(void *Data)
+{
+    wfm_doc_t *wfm = (wfm_doc_t *)Data;
+    pErr execRetVal = NULL;
+
+    if (wfm == NULL)
+    {
+        MeshError("%s : Data is empty\n",__FUNCTION__);
+        return execRetVal;
+    }
+
+    execRetVal = (pErr) malloc (sizeof(Err));
+    if (execRetVal == NULL )
+    {
+        MeshError("%s : malloc failed\n",__FUNCTION__);
+        return execRetVal;
+    }
+
+    memset(execRetVal,0,sizeof(Err));
+    execRetVal->ErrorCode = BLOB_EXEC_SUCCESS;
+    snprintf(execRetVal->ErrorMsg,sizeof(execRetVal->ErrorMsg) - 1, "%s","enabled");
+    return execRetVal;
+}
+
 pErr steeringprofiledefaults_execute_timeout_handler(void *data)
 {
     sp_doc_t *sp = (sp_doc_t *)data;
     pErr execRetVal = NULL;
 
     if (sp == NULL)
-         MeshError("%s : malloc failed\n",__FUNCTION__);
+    {
+        MeshError("%s : Data is empty\n",__FUNCTION__);
+        return execRetVal;
+    }
 
     execRetVal = (pErr) malloc (sizeof(Err));
     if (execRetVal == NULL )
@@ -799,7 +924,7 @@ pErr mesh_execute_timeout_handler(void *Data)
     execRetVal = (pErr) malloc (sizeof(Err));
     if (execRetVal == NULL )
     {
-        MeshError("%s : malloc failed\n",__FUNCTION__);
+        MeshError("%s : Data is empty\n",__FUNCTION__);
         return execRetVal;
     }
 

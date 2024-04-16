@@ -25,6 +25,7 @@
 #include "cosa_webconfig_api.h"
 #include "helpers.h"
 #include "safec_lib_common.h"
+#include "cosa_meshagent_internal.h"
 #include <cjson/cJSON.h>
 /*----------------------------------------------------------------------------*/
 /*                                   Macros                                   */
@@ -33,6 +34,8 @@
 #define STEERING_CONFIG_FILE       "/nvram/steering.json"
 #define DEVICE_CONFIG_FILE         "/nvram/device_profile.json"
 #define INTERFERENCE_CONFIG_FILE   "/nvram/mwo/sa/lts_deployment_stats"
+#define WIFI_MOTION_CONFIG_FILE    "/nvram/wfm_setting.json"
+#define WFM_GATEKEEPER_URL         "legacy"
 /*----------------------------------------------------------------------------*/
 /*                               Data Structures                              */
 /*----------------------------------------------------------------------------*/
@@ -42,13 +45,16 @@
 /*                            File Scoped Variables                           */
 /*----------------------------------------------------------------------------*/
 
+extern COSA_DATAMODEL_MESHAGENT* g_pMeshAgent;
+
 meshblob_name_t  meshBlobNameArr[] = {
     {MESH,                             "mesh"},
     {STEERING_PROFILE_DEFAULT,         "meshsteeringprofiles"},
     {DEVICE,                           "DeviceToSteeringProfile"},
     {WIFI_CONFIG,                      "wificonfig_stat"},
     {CONFIGS,                          "mwoconfigs"},
-    {INTERFERENCE,                     "interference"}
+    {INTERFERENCE,                     "interference"},
+    {WIFI_MOTION,                      "wifimotionsettings"}
 };
 
 static c_item_t map_ovsdb_reject_detection[] = {
@@ -142,7 +148,7 @@ void* helper_convert( const void *buf, size_t len,
     else
     {
         memset( p, 0, struct_size );
-        if( NULL != buf && 0 < len )
+        if( NULL != buf && 0 < len && process != NULL && destroy != NULL )
         {
             size_t offset = 0;
             msgpack_unpacked msg;
@@ -199,6 +205,7 @@ cJSON* create_clientSteering_object(DpClientSteering_t *client)
     if(client == NULL)
     {
         MeshInfo("%s:client is NULL\n",__FUNCTION__);
+        return NULL;
     }
     cJSON *clientSteering = cJSON_CreateObject();
     // Add fields to clientSteering based on the id
@@ -248,6 +255,7 @@ cJSON* create_bandSteering_object(DpBandSteering_t *steering)
     if(steering == NULL)
     {
         MeshInfo("%s:steering is NULL\n",__FUNCTION__);
+        return NULL;
     }
 
     cJSON *bandSteering = cJSON_CreateObject();
@@ -334,7 +342,18 @@ char *steering_profile_event_data_get()
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event_type", "MWO_TOS_CONFIGURATION");
     cJSON *event_data = cJSON_CreateObject();
-    cJSON_AddStringToObject(event_data, "message", "Default profile updated.");
+    cJSON_AddStringToObject(event_data, "message", g_pMeshAgent->meshSteeringProfileDefault?"Default profile updated.":"Default profile Not Updated");
+    cJSON_AddItemToObject(root, "event_data", event_data);
+    char *json_string = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return json_string;
+}
+char *wfm_event_data_get()
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "event_type", "WFM_CONFIGURATION");
+    cJSON *event_data = cJSON_CreateObject();
+    cJSON_AddStringToObject(event_data, "message", g_pMeshAgent->meshwfmSettingsReceived?"WifiMotion Config Updated":"WifiMotion Config Not Updated");
     cJSON_AddItemToObject(root, "event_data", event_data);
     char *json_string = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -346,7 +365,7 @@ char *client_profile_event_data_get()
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event_type", "MWO_CLIENT_TO_PROFILE_MAP_EVENT");
     cJSON *event_data = cJSON_CreateObject();
-    cJSON_AddStringToObject(event_data, "message", "Client mapping Updated");
+    cJSON_AddStringToObject(event_data, "message",g_pMeshAgent->meshClientProfileReceived?"Client mapping Updated":"Client mapping Not Updated");
     cJSON_AddItemToObject(root, "event_data", event_data);
     char *json_string = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -411,6 +430,29 @@ void save_ai_profile_tofile(ai_doc_t *ai)
 
     fprintf(file, "%s", string);
 
+    fclose(file);
+
+    free(string);
+    cJSON_Delete(root);
+}
+
+void save_wfm_settings_tofile(wfm_doc_t *wfm)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON *wfm_settings = cJSON_CreateObject();
+    cJSON_AddItemToObject(root, "wifimotionsettings", wfm_settings);
+    cJSON_AddBoolToObject(wfm_settings, "wfm_enable", wfm->wfm_enable);
+    cJSON_AddStringToObject(wfm_settings, "wfm_gatekeeper_url", WFM_GATEKEEPER_URL);
+
+    char *string = cJSON_PrintUnformatted(root);
+    FILE *file = fopen(WIFI_MOTION_CONFIG_FILE, "w");
+
+    if (file == NULL) {
+        MeshInfo("Error opening file!\n");
+        return;
+    }
+
+    fprintf(file, "%s", string);
     fclose(file);
 
     free(string);
@@ -648,7 +690,7 @@ void save_steering_profile_tofile(sp_doc_t *sp)
     cJSON_AddItemToObject(meshsteeringprofiles, "devicespecificprofiles", devicespecificprofiles);
     if(sp->device)
     {
-        for (int i = 0; i < 15; i++)
+        for (int i = 0; i < sp->device->count; i++)
         {
             cJSON *profile = cJSON_CreateObject();
             cJSON_AddItemToArray(devicespecificprofiles, profile);
@@ -718,6 +760,11 @@ void* blob_data_convert( const void *buf, size_t len, eBlobType blob_type )
             blob_size = sizeof(ai_doc_t);
             process = process_aidoc;
             destroy = destroy_aidoc;
+        break;
+        case WIFI_MOTION:
+            blob_size = sizeof(wfm_doc_t);
+            process = process_wfmdoc;
+            destroy = destroy_wfmdoc;
         break;
         default:
         break;
@@ -882,6 +929,70 @@ int process_meshbackhauldoc(void *data,int num, ... )
     return 0;
 }
 
+void destroy_wfmdoc( void *data )
+{
+    wfm_doc_t *wfm = ( wfm_doc_t *) data;
+    if( NULL != wfm )
+    {
+        if( NULL != wfm->subdoc_name )
+        {
+            free( wfm->subdoc_name );
+            wfm->subdoc_name = NULL;
+        }
+        free( wfm );
+        wfm = NULL;
+    }
+}
+
+int process_wfmdocparams (wfm_doc_t *wfm, msgpack_object_map *mapobj )
+{
+    int left = mapobj->size;
+    msgpack_object_kv *p;
+    p = mapobj->ptr;
+    while(0 < left--)
+    {
+        if( MSGPACK_OBJECT_STR == p->key.type )
+        {
+            if( MSGPACK_OBJECT_BOOLEAN == p->val.type )
+            {
+                if( 0 == match(p, "wfm_enable") )
+                {
+                    wfm->wfm_enable = p->val.via.boolean;
+                }
+            }
+        }
+        p++;
+    }
+    return 0;
+}
+
+int process_wfmdoc(void *data,int num, ... )
+{
+    va_list valist;
+    wfm_doc_t *wfm = (wfm_doc_t *)data;
+
+    va_start(valist, num);
+
+    msgpack_object *obj = va_arg(valist, msgpack_object *);
+    msgpack_object_map *mapobj = &obj->via.map;
+
+    msgpack_object *obj1 = va_arg(valist, msgpack_object *);
+    wfm->subdoc_name = strndup( obj1->via.str.ptr, obj1->via.str.size );
+
+    msgpack_object *obj2 = va_arg(valist, msgpack_object *);
+    wfm->version = (uint32_t) obj2->via.u64;
+
+    msgpack_object *obj3 = va_arg(valist, msgpack_object *);
+    wfm->transaction_id = (uint16_t) obj3->via.u64;
+
+    va_end(valist);
+    if (0 != process_wfmdocparams( wfm,mapobj ))
+    {
+        return -1;
+    }
+    return 0;
+}
+
 int process_dp_steering_gwonly(DpGwOnlyOverlay *gw,msgpack_object_map *map)
 {
     int left = map->size;
@@ -920,13 +1031,19 @@ int process_dp_steering_6g_gwonly(DpGwOnlyOverlay6g *gw_6g,msgpack_object_map *m
             if( 0 == match(p, "preferred6g") )
             {
                 val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-                item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
-                if (!item) {
-                    MeshError("Unknown preferred 6g %s",val);
+
+                if (val == NULL)
+                    MeshError("Memory allocation failed for preferred6g value");
+                else
+                {
+                    item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                    if (item)
+                        gw_6g->pref_6g  = (sp_client_pref_allowed)item->key;
+                    else
+                        MeshError("Unknown preferred 6g %s",val);
+                    free(val);
                 }
-                gw_6g->pref_6g  = (sp_client_pref_allowed)item->key;
-                free(val);
-            }   
+            }
         }
         p++;
     }
@@ -965,7 +1082,7 @@ int process_dp_bandsteering(DpBandSteering_t *dp_steer, msgpack_object_map *map)
                  }
 
             }
-            if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
+            else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
             {
                  if( 0 == match(p, "hwm") )
                  {
@@ -985,28 +1102,38 @@ int process_dp_bandsteering(DpBandSteering_t *dp_steer, msgpack_object_map *map)
                 if( 0 == match(p, "kickType") )
                 {
                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                    if (!item) {
-                        MeshError("Unknown kick type %s",val);
-                    }
-                    dp_steer->present_kickType = true;
-                    dp_steer->kickType  = (sp_client_kick_t)item->key;
-                    if(val)
+                    if (val == NULL)
+                        MeshError("Memory allocation failed for kickType value");
+                    else
+                    {
+                        item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                        if (item)
+                        {
+                           dp_steer->present_kickType = true;
+                           dp_steer->kickType  = (sp_client_kick_t)item->key;
+                        }
+                        else
+                            MeshError("Unknown kick type %s",val);
                         free(val);
+                    }
                 }
                 if( 0 == match(p, "stickyKickType") )
                 {
                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                    if (!item) {
-                        MeshError("Unknown kick type %s",val);
-                    }
-                    dp_steer->present_stickyKickType = true;
-                    dp_steer->stickyKickType  = (sp_client_kick_t)item->key;
-                    if(val)
+                    if (val == NULL)
+                        MeshError("Memory allocation failed for stickyKickType value");
+                    else
+                    {
+                        item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                        if (item)
+                        {
+                            dp_steer->present_stickyKickType = true;
+                            dp_steer->stickyKickType  = (sp_client_kick_t)item->key;
+                        }
+                        else
+                            MeshError("Unknown kick type %s",val);
                         free(val);
+                    }
                 }
             }
             else if( MSGPACK_OBJECT_MAP  == p->val.type )
@@ -1084,52 +1211,76 @@ int process_dp_bandsteering6g(DpBandSteering6G_t *dp_steer6g, msgpack_object_map
                 if( 0 == match(p, "kickType") )
                 {
                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                    if (!item) {
-                        MeshError("Unknown kick type %s",val);
-                    }
-                    dp_steer6g->present_kickType = true;
-                    dp_steer6g->kickType  = (sp_client_kick_t)item->key;
-                    if(val)
+                    if (val == NULL)
+                        MeshError("Memory allocation failed for kickType value");
+                    else
+                    {
+                        item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                        if (item)
+                        {
+                            dp_steer6g->present_kickType = true;
+                            dp_steer6g->kickType  = (sp_client_kick_t)item->key;
+                        }
+                        else
+                            MeshError("Unknown preferred kickType %s",val);
                         free(val);
+                    }
                 }
                 if( 0 == match(p, "stickyKickType") )
                 {
                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                    if (!item) {
-                        MeshError("Unknown kick type %s",val);
-                    }
-                    dp_steer6g->present_stickyKickType = true;
-                    dp_steer6g->stickyKickType  = (sp_client_kick_t)item->key;
-                    if(val)
+                    if (val == NULL)
+                        MeshError("Memory allocation failed for stickyKickType value");
+                    else
+                    {
+                        item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                        if (item)
+                        {
+                            dp_steer6g->present_stickyKickType = true;
+                            dp_steer6g->stickyKickType  = (sp_client_kick_t)item->key;
+                        }
+                        else
+                            MeshError("Unknown stickyKickType %s",val);
                         free(val);
+                    }
                 }
                 if( 0 == match(p, "preferred5g") )
-                {   
-                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                {
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
 
-                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
-                     if (!item) {
-                         MeshError("Unknown preferred 5g %s",val);
-                     }
-                     dp_steer6g->present_pref_5g  = true;
-                     dp_steer6g->pref_5g  = (sp_client_pref_allowed)item->key;
-                     free(val);
+                    if (val == NULL)
+                        MeshError("Memory allocation failed for preferred5g value");
+                    else
+                    {
+                        item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                        if (item)
+                        {
+                            dp_steer6g->present_pref_5g  = true;
+                            dp_steer6g->pref_5g  = (sp_client_pref_allowed)item->key;
+                        }
+                        else
+                            MeshError("Unknown preferred 5g %s",val);
+                        free(val);
+                    }
                  }
                  else if( 0 == match(p, "preferred6g") )
-                 {   
+                 {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
 
-                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
-                     if (!item) {
-                         MeshError("Unknown preferred 6g %s",val);
+                     if (val == NULL)
+                        MeshError("Memory allocation failed for preferred6g value");
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                         if (item)
+                         {
+                             dp_steer6g->present_pref_6g  = true;
+                             dp_steer6g->pref_6g  = (sp_client_pref_allowed)item->key;
+                         }
+                         else
+                             MeshError("Unknown preferred 6g %s",val);
+                         free(val);
                      }
-                     dp_steer6g->present_pref_6g  = true;
-                     dp_steer6g->pref_6g  = (sp_client_pref_allowed)item->key;
-                     free(val);
                  }
             }
             else if( MSGPACK_OBJECT_MAP  == p->val.type )
@@ -1256,30 +1407,40 @@ int process_dp_client(DpClientSteering_t *dp_client, msgpack_object_map *map)
             else if(MSGPACK_OBJECT_STR == p->val.type)
             {
                 if( 0 == match(p, "kickType") )
-                {   
+                {
                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                    if (!item) {
-                        MeshError("Unknown kick type %s",val);
-                    }
-                    dp_client->present_kickType = true;
-                    dp_client->kickType  = (sp_client_kick_t)item->key;
-                    if(val)
+                    if (val == NULL)
+                        MeshError("Memory allocation failed for kickType value");
+                    else
+                    {
+                        item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                        if (item) 
+                        {
+                            dp_client->present_kickType = true;
+                            dp_client->kickType  = (sp_client_kick_t)item->key;
+                        }
+                        else
+                            MeshError("Unknown kick type %s",val);
                         free(val);
+                    }
                 }
                 if( 0 == match(p, "specKickType") )
                 {
                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                    item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                    if (!item) {
-                        MeshError("Unknown kick type %s",val);
-                    }
-                    dp_client->present_specKickType = true;
-                    dp_client->specKickType  = (sp_client_kick_t)item->key;
-                    if(val)
+                    if (val == NULL)
+                        MeshError("Memory allocation failed for specKickType value");
+                    else
+                    {
+                        item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                        if (item)
+                        {
+                            dp_client->present_specKickType = true;
+                            dp_client->specKickType  = (sp_client_kick_t)item->key;
+                        }
+                        else
+                            MeshError("Unknown specKickType %s",val);
                         free(val);
+                    }
                 }
             }
             else
@@ -1317,8 +1478,7 @@ int process_ai(interference_t *i, msgpack_object_map *map )
                        } else {
                            MeshError("Unknown radio type %s",val);
                        }
-                       if(val)
-                           free(val);
+                       free(val);
                    }
                }
 
@@ -1395,12 +1555,17 @@ int process_configs (configs_t *c, msgpack_object_map *map )
                 if( 0 == match(p, "type") )
                 {
                     val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-                    item = c_get_item_by_str(map_mwo_configs_type, val);
-                    if (!item) {
-                        MeshError("Unknown type %s\n",val);
+                    if (val == NULL)
+                        MeshError("Memory allocation failed for type value");
+                    else
+                    {
+                        item = c_get_item_by_str(map_mwo_configs_type, val);
+                        if (item)
+                            c->type = (eValueType)item->key;
+                        else
+                            MeshError("Unknown type %s\n",val);
+                        free(val);
                     }
-                    c->type = (eValueType)item->key;
-                    free(val);
                 }
                 if( 0 == match(p, "data") )
                 {
@@ -1438,23 +1603,26 @@ int process_client_profile(clients_t *e, msgpack_object_map *map )
     MeshInfo("Number of process_client_profile = %d\n",left);
     p = map->ptr;
     while( 0 < left--)
-    {   
+    {
         if( MSGPACK_OBJECT_STR == p->key.type )
-        {  
-           if( MSGPACK_OBJECT_STR == p->val.type )
-           {   
-               if( 0 == match(p, "mac_addr") )
-               {   
-                   val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-                   rc = strcpy_s(e->mac,18 , val);
-                    if(rc != EOK)
-                    {   
-                        ERR_CHK(rc);
-                        MeshError("Error in copying\n");
+        {
+            if( MSGPACK_OBJECT_STR == p->val.type )
+            {
+                if( 0 == match(p, "mac_addr") )
+                {
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                    if(val)
+                    {
+                        rc = strcpy_s(e->mac,sizeof(e->mac) , val);
+                        if(rc != EOK)
+                        {
+                            ERR_CHK(rc);
+                            MeshError("Error in copying\n");
+                        }
+                        MeshInfo("DeviceProfile: mac_addr = %s\n",e->mac);
+                        free(val);
                     }
-                   MeshInfo("DeviceProfile: mac_addr = %s\n",e->mac);
-                   free(val);
-               }
+                }
             }
             else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
             {   
@@ -1483,20 +1651,23 @@ int process_device_profiles( DeviceSpecificProfile_t *e, msgpack_object_map *map
     {
         if( MSGPACK_OBJECT_STR == p->key.type )
         {
-           if( MSGPACK_OBJECT_STR == p->val.type )
-           {
-               if( 0 == match(p, "description") )
-               {
-                   val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-                   rc = strcpy_s(e->description, 100, val);
-                    if(rc != EOK)
-                    {   
-                        ERR_CHK(rc);
-                        MeshError("Error in copying\n");
+            if( MSGPACK_OBJECT_STR == p->val.type )
+            {
+                if( 0 == match(p, "description") )
+                {
+                    val = strndup( p->val.via.str.ptr, p->val.via.str.size );
+                    if (val)
+                    {
+                        rc = strcpy_s(e->description, 100, val);
+                        if(rc != EOK)
+                        {
+                            ERR_CHK(rc);
+                            MeshError("Error in copying\n");
+                        }
+                        free(val);
+                        MeshInfo("Description =%s\n",e->description);
                     }
-                   free(val);
-                   MeshInfo("Description =%s\n",e->description);
-               }
+                }
             }
             else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
             {
@@ -1609,26 +1780,35 @@ int process_bs_gw_only_params(sp_gw_only_t *gw,msgpack_object_map *map,bool is_6
                  if( 0 == match(p, "preferred5g") )
                  {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
-                     if (!item) {
-                         MeshError("Unknown preferred 5g %s",val);
+                     if(val == NULL)
+                         MeshError("Memory allocation failed for preferred5g value");
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                         if (item)
+                             gw->pref_5g  = (sp_client_pref_allowed)item->key;
+                         else
+                             MeshError("Unknown preferred 5g %s",val);
+                         free(val);
                      }
-                     gw->pref_5g  = (sp_client_pref_allowed)item->key;
-                     free(val);
                  }
                  else if( 0 == match(p, "preferred6g") )
                  {          
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-  
-                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
-                     if (!item) {
-                         MeshError("Unknown preferred 6g %s",val);
+                     if(val == NULL)
+                         MeshError("Memory allocation failed for preferred6g value"); 
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                         if (item) {
+                             if(gw->gw_only_6g)
+                                 gw->gw_only_6g->pref_6g  = (sp_client_pref_allowed)item->key;
+                         }
+                         else
+                             MeshError("Unknown preferred 6g %s",val);
+                         free(val);
                      }
-                     if(gw->gw_only_6g)
-                         gw->gw_only_6g->pref_6g  = (sp_client_pref_allowed)item->key;
-                     free(val);
-                 } 
+                }
             }
             else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
             {
@@ -1789,38 +1969,56 @@ int process_csparams( sp_defaultdoc_t *steer, msgpack_object_map *map)
                  if( 0 == match(p, "kickType") )
                  {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                     item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                     if (!item) {
-                         MeshError("Unknown kick type %s",val);
+                     if(val == NULL) {
+                         MeshError("Memory allocation failed for kickType value");
                      }
-                     e->kick_type  = (sp_client_kick_t)item->key;
-                     if(val)
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                         if (item) {
+                             e->kick_type  = (sp_client_kick_t)item->key;
+                         }
+                         else {
+                             MeshError("Unknown kick type %s",val);
+                         }
                          free(val);
+                     }
                  }
                  if( 0 == match(p, "specKickType") )
-                 {   
+                 {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                     item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                     if (!item) {
-                         MeshError("Unknown kick type %s",val);
+                     if(val == NULL) {
+                         MeshError("Memory allocation failed for specKickType value");
                      }
-                     e->spec_kick_type  = (sp_client_kick_t)item->key;
-                     if(val)
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                         if(item) {
+                             e->spec_kick_type  = (sp_client_kick_t)item->key;
+                         }
+                         else {
+                             MeshError("Unknown kick type %s",val);
+                         }
                          free(val);
+                     }
                  }
                  if( 0 == match(p, "rejectDetection") )
-                 {   
+                 {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                     item = c_get_item_by_str(map_ovsdb_reject_detection, val);
-                     if (!item) {
-                         MeshError("Unknown reject detection %s",val);
+                     if(val == NULL) {
+                         MeshError("Memory allocation failed for rejectDetection value");
                      }
-                     e->reject_detection = (sp_client_reject_t)item->key;
-                     if(val)
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_reject_detection, val);
+                         if (item) {
+                             e->reject_detection = (sp_client_reject_t)item->key;
+                         }
+                         else {
+                             MeshError("Unknown reject detection %s",val);
+                         }
                          free(val);
+                     }
                  }
               }
               else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
@@ -2081,60 +2279,78 @@ int process_bsparams( sp_defaultdoc_t *steer, msgpack_object_map *map, bool is_6
                  if( 0 == match(p, "kickType") )
                  {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                     item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                     if (!item) {
-                         MeshError("Unknown kick type %s",val);
+                     if(val == NULL)
+                         MeshError("Memory allocation failed for kickType value");
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                         if (item)
+                             e->kick_type  = (sp_client_kick_t)item->key;
+                         else
+                             MeshError("Unknown kick type %s",val);
+                         free(val);
                      }
-                     e->kick_type  = (sp_client_kick_t)item->key;
-                     free(val);
                  }
                  if( 0 == match(p, "stickyKickType") )
                  {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                     item = c_get_item_by_str(map_ovsdb_kick_type, val);
-                     if (!item) {
-                         MeshError("Unknown sticky kick type %s",val);
+                     if(val == NULL)
+                         MeshError("Memory allocation failed for stickyKickType value");
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_kick_type, val);
+                         if (item)
+                             e->sticky_kick_type  = (sp_client_kick_t)item->key;
+                         else
+                             MeshError("Unknown sticky kick type %s",val);
+                         free(val);
                      }
-                     e->sticky_kick_type  = (sp_client_kick_t)item->key;
-                     free(val);
                  }
                  if( 0 == match(p, "preferred5g") )
                  {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
-                     if (!item) {
-                         MeshError("Unknown preferred 5g %s",val);
+                     if(val == NULL)
+                         MeshError("Memory allocation failed for stickyKickType value");
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                         if (item)
+                             e->pref_allowed  = (sp_client_pref_allowed)item->key;
+                         else
+                             MeshError("Unknown preferred 5g %s",val);
+                         free(val);
                      }
-                     e->pref_allowed  = (sp_client_pref_allowed)item->key;
-                     free(val);
                  }
                  if( 0 == match(p, "preferred6g") )
                  {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                     item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
-                     if (!item) {
-                         MeshError("Unknown preferred 6g %s",val);
-                     }
-                     e->pref_6g  = (sp_client_pref_allowed)item->key;
-                     if (val)
+                     if(val == NULL)
+                         MeshError("Memory allocation failed for preferred6g value");
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_pref_5g_allowed, val);
+                         if (item)
+                             e->pref_6g = (sp_client_pref_allowed)item->key;
+                         else
+                             MeshError("Unknown preferred 6g %s",val);
                          free(val);
+                     }
                  }
 
                  if( 0 == match(p, "rejectDetection") )
                  {
                      val = strndup( p->val.via.str.ptr, p->val.via.str.size );
-
-                     item = c_get_item_by_str(map_ovsdb_reject_detection, val);
-                     if (!item) {
-                         MeshError("Unknown reject detection %s",val);
-                     }
-                     e->reject_detection = (sp_client_reject_t)item->key;
-                     if(val)
+                     if(val == NULL)
+                         MeshError("Memory allocation failed for rejectDetection value");
+                     else
+                     {
+                         item = c_get_item_by_str(map_ovsdb_reject_detection, val);
+                         if (item)
+                             e->reject_detection = (sp_client_reject_t)item->key;
+                         else
+                             MeshError("Unknown reject detection %s",val);
                          free(val);
+                     }
                  }
               }
               else if( MSGPACK_OBJECT_POSITIVE_INTEGER == p->val.type )
@@ -2534,7 +2750,7 @@ void destroy_spsteeringdoc(void *data)
         }
         if(NULL != mb->device)
         {
-            for (int i = 0;i<14;i++)
+            for (int i = 0;i < mb->device->count;i++)
             {
                 if(mb->device->profiles[i].bandSteering)
                 {
@@ -2557,6 +2773,12 @@ void destroy_spsteeringdoc(void *data)
                     mb->device->profiles[i].bandSteering6g = NULL;
                 }
             }
+            if(mb->device->profiles)
+            {
+                free(mb->device->profiles);
+                mb->device->profiles = NULL;
+            }
+
             free(mb->device);
             mb->device = NULL;
         }
@@ -2754,7 +2976,9 @@ int process_device_profile( DeviceSpecificProfiles_t *device, msgpack_object_arr
     {
         size_t i;
 
-        memset( device, 0, sizeof(DeviceSpecificProfiles_t));
+        MeshInfo("Device profile array size == %d\n",array->size);
+        device->count = array->size;
+        device->profiles =  malloc(array->size *  sizeof(DeviceSpecificProfile_t));
         for( i = 0; i < array->size; i++ )
         {
             if( MSGPACK_OBJECT_MAP != array->ptr[i].type )
@@ -2762,6 +2986,7 @@ int process_device_profile( DeviceSpecificProfiles_t *device, msgpack_object_arr
                 errno = MB_INVALID_OBJECT;
                 return -1;
             }
+            memset( (device->profiles + i), 0, sizeof(DeviceSpecificProfile_t));
             if( 0 != process_device_profiles(&device->profiles[i], &array->ptr[i].via.map))
             {
                 MeshInfo("process_device_profiles failed\n");

@@ -52,18 +52,8 @@
 #define  CCSP_MESHAGENT_START_CFG_FILE						"MeshAgent.cfg"
 
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED)
-#if 0
-#define EVENT_MESH_ETHERNETBHAUL_UPLINK  "Device.X_RDK_MeshAgent.EthernetBhaulUplink.Status"
-#define EVENT_MESH_WAN_LINK              "Device.X_RDK_MeshAgent.MeshWANLink.Status"
-#define EVENT_MESH_WAN_IFNAME            "Device.X_RDK_MeshAgent.MeshWANLink.Interface.Name"
-#endif
 #define MESH_WAN_INTERFACE               "dmsb.Mesh.WAN.Interface.Name"
 #define MESH_ETH_INTERFACE               "dmsb.l2net.11.Members.Link"
-#if 0
-#define NUM_OF_RBUS_PARAMS                6
-#define EVENT_MWO_TOS_CONFIGURATION      "Device.X_RDK_MeshAgent.MWO.SteeringProfileData"
-#define EVENT_MWO_CLIENT_TO_PROFILE_MAP_EVENT "Device.X_RDK_MeshAgent.MWO.ClientProfileData"
-#endif
 #endif
 
 #define WIFI_STA_INTERFACE_NAME          "Device.WiFi.STA.%d.InterfaceName"

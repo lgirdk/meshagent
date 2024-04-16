@@ -42,9 +42,12 @@ size_t b64_decode( const uint8_t *input,
  *  @return the constant string (do not alter or free) describing the error
  */
 const char* meshbackhauldoc_strerror( int errnum );
+void save_wfm_settings_tofile(wfm_doc_t *wfm);
 void save_steering_profile_tofile(sp_doc_t *sp);
 void save_device_profile_tofile(dp_doc_t *dp);
+void save_wfm_tofile(wfm_doc_t *wfm);
 char *steering_profile_event_data_get();
+char *wfm_event_data_get();
 char *client_profile_event_data_get();
 void save_ai_profile_tofile(ai_doc_t *ai);
 void* blob_data_convert( const void *buf, size_t len,eBlobType blob_type );
@@ -58,6 +61,7 @@ void destroy_spsteeringdoc(void *mb);
 void destroy_dpdoc (void *db);
 void destroy_configsdoc (void *configs);
 void destroy_aidoc(void *data);
+void destroy_wfmdoc (void *wfm);
 int process_bs_sticky_11kvdoc (void *sticky_btm, int num ,...);
 int process_bs_gw_only_doc(void *gw, int num ,...);
 int process_bs_11kvdoc (void *bs,int num, ...);
@@ -66,5 +70,6 @@ int process_spsteeringdoc( void *sp_default,int num, ... );
 int process_dpdoc( void  *data,int num, ... );
 int process_configsdoc( void  *data,int num, ... );
 int process_aidoc( void  *data,int num, ... );
+int process_wfmdoc( void  *data,int num, ... );
 void destroy_bs_gw_only_doc(void *gw);
 #endif

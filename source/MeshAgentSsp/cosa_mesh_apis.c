@@ -65,6 +65,7 @@
 #include "OvsAgentApi.h"
 #endif
 #include "mesh_rbus.h"
+#include "helpers.h"
 // TELEMETRY 2.0 //RDKB-26019
 #include <telemetry_busmessage_sender.h>
 
@@ -237,7 +238,8 @@ rbusError_t rbusEventSubHandler(rbusHandle_t handle, rbusEventSubAction_t action
 
 rbusDataElement_t meshRbusDataElements[NUM_OF_RBUS_PARAMS] = {
         {EVENT_MWO_TOS_CONFIGURATION, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
-        {EVENT_MWO_CLIENT_TO_PROFILE_MAP_EVENT, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}}
+        {EVENT_MWO_CLIENT_TO_PROFILE_MAP_EVENT, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
+        {EVENT_WFM_CONFIGURATION, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}}
 #ifdef WAN_FAILOVER_SUPPORTED
         ,{EVENT_MESH_WAN_LINK, RBUS_ELEMENT_TYPE_EVENT, {rbusGetBoolHandler, NULL, NULL, NULL, rbusEventSubHandler, NULL}},
         {EVENT_MESH_WAN_IFNAME, RBUS_ELEMENT_TYPE_EVENT, {rbusGetStringHandler, NULL, NULL, NULL, NULL, NULL}},
@@ -2955,6 +2957,7 @@ void Send_MESH_WFO_ENABLED_Msg(bool bStatus)
 rbusError_t rbusGetStringHandler(rbusHandle_t handle, rbusProperty_t property, rbusGetHandlerOptions_t* opts)
 {
     char const* name = rbusProperty_GetName(property);
+    char* payload = NULL;
     (void)handle;
     (void)opts;
 #ifdef WAN_FAILOVER_SUPPORTED
@@ -2982,11 +2985,21 @@ rbusError_t rbusGetStringHandler(rbusHandle_t handle, rbusProperty_t property, r
 #endif
     if(strcmp(name, EVENT_MWO_TOS_CONFIGURATION) == 0 )
     {
-        rbusValue_SetString(value, g_pMeshAgent->meshSteeringProfileDefault?"Default Profile Updated":"Not Updated");
+        payload = steering_profile_event_data_get();
+        if(payload)
+            rbusValue_SetString(value, payload);
     }
     else if(strcmp(name, EVENT_MWO_CLIENT_TO_PROFILE_MAP_EVENT) == 0 )
     {
-        rbusValue_SetString(value,g_pMeshAgent->meshClientProfileReceived?"Updated profile data":"Not Updated");
+        payload = client_profile_event_data_get();
+        if(payload)
+            rbusValue_SetString(value,payload);
+    }
+    else if(strcmp(name, EVENT_WFM_CONFIGURATION) == 0 )
+    {
+        payload = wfm_event_data_get();
+        if (payload)
+            rbusValue_SetString(value,payload);
     }
     else
     {
@@ -2994,6 +3007,10 @@ rbusError_t rbusGetStringHandler(rbusHandle_t handle, rbusProperty_t property, r
         rbusValue_Release(value);
         return RBUS_ERROR_INVALID_INPUT;
     }
+
+    if (payload)
+        free(payload);
+
     rbusProperty_SetValue(property, value);
     rbusValue_Release(value);
     return RBUS_ERROR_SUCCESS;

@@ -32,6 +32,7 @@ typedef enum
 {
     MWO_TOS_CONFIGURATION = 0,
     MWO_CLIENT_TO_PROFILE_MAP_EVENT,
+    WFM_CONFIGURATION,
 #if defined(ONEWIFI) || defined(WAN_FAILOVER_SUPPORTED)
     MESH_RBUS_PUBLISH_WAN_LINK,
     MESH_RBUS_PUBLISH_BACKHAUL_IFNAME,
@@ -44,10 +45,11 @@ typedef enum
 #define EVENT_MESH_WAN_LINK              "Device.X_RDK_MeshAgent.MeshWANLink.Status"
 #define EVENT_MESH_WAN_IFNAME            "Device.X_RDK_MeshAgent.MeshWANLink.Interface.Name"
 #define EVENT_MESH_BACKHAUL_IFNAME       "Device.X_RDK_MeshAgent.MeshBackHaul.Ifname"
+#define EVENT_WFM_CONFIGURATION          "Device.X_RDK_MeshAgent.MWO.WFMSettings"
 #ifdef WAN_FAILOVER_SUPPORTED
-#define NUM_OF_RBUS_PARAMS                6
+#define NUM_OF_RBUS_PARAMS                7
 #else
-#define NUM_OF_RBUS_PARAMS                2
+#define NUM_OF_RBUS_PARAMS                3
 #endif
 #define EVENT_MWO_TOS_CONFIGURATION      "Device.X_RDK_MeshAgent.MWO.SteeringProfileData"
 #define EVENT_MWO_CLIENT_TO_PROFILE_MAP_EVENT "Device.X_RDK_MeshAgent.MWO.ClientProfileData"

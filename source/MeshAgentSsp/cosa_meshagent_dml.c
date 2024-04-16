@@ -395,6 +395,13 @@ MWO_GetParamStringValue
         return 0;
     }
 
+    if(strcmp(ParamName, "WifiMotionSettings") == 0)
+    {
+        MeshInfo("WifiMotionSettings Get Not supported\n");
+        strcpy(pValue, "");
+        return 0;
+    }
+
     MeshError("Unsupported Namespace:%s size:%ln\n", ParamName,pUlSize);
 
     return -1;
@@ -1427,6 +1434,14 @@ MWO_SetParamStringValue
         mesh_msgpack_decode(pString,5000,DEVICE);
         return ret;
     }
+
+    if(strcmp(ParamName, "WifiMotionSettings") == 0)
+    {
+        MeshInfo("Received WifiMotionSettings\n");
+        mesh_msgpack_decode(pString,500,WIFI_MOTION);
+        return ret;
+    }
+
     MeshError("Unsupported Namespace:%s\n", ParamName);
 
     return FALSE;

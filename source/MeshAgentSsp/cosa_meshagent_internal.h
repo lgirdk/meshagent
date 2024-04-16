@@ -47,6 +47,7 @@ _COSA_DATAMODEL_MESHAGENT
     ULONG                       meshReinitPeriod;
     BOOL                        meshSteeringProfileDefault;
     BOOL                        meshClientProfileReceived;
+    BOOL                        meshwfmSettingsReceived;
 }
 COSA_DATAMODEL_MESHAGENT,  *PCOSA_DATAMODEL_MESHAGENT;
 

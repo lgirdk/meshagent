@@ -30,7 +30,7 @@
 #include <webconfig_framework.h>
 #include <stdbool.h>
 
-#define SUBDOC_COUNT 5
+#define SUBDOC_COUNT 7
 
 #define MESH_CACHE_SIZE 4
 #define BLOCK_SIZE 32
@@ -116,7 +116,8 @@ typedef enum {
     DEVICE,
     WIFI_CONFIG,
     CONFIGS,
-    INTERFERENCE
+    INTERFERENCE,
+    WIFI_MOTION
 }eBlobType;
 
 typedef enum {
@@ -354,7 +355,8 @@ typedef struct{
 }DeviceSpecificProfile_t;
 
 typedef struct{
-    DeviceSpecificProfile_t profiles[15];
+    DeviceSpecificProfile_t *profiles;
+    int count;
 }DeviceSpecificProfiles_t;
 
 typedef struct
@@ -420,6 +422,13 @@ typedef struct {
     uint32_t     version;
     uint16_t     transaction_id;
 } meshbackhauldoc_t;
+
+typedef struct {
+    bool         wfm_enable;
+    char         * subdoc_name;
+    uint32_t     version;
+    uint16_t     transaction_id;
+} wfm_doc_t;
 
 typedef struct
 {
