@@ -1130,8 +1130,15 @@ int Mesh_EthBhaulPodVlanSetup(int PodIdx, bool isOvsMode)
     if (get_eth_interface(ethports))
         MeshInfo("Eth ports are :%s\n", ethports);
 
-    if (get_wan_bridge())
+    if (get_wan_bridge() && meshWANIfname != NULL)
+    {
         MeshInfo("Mesh Wan interface :%s\n", meshWANIfname);
+    }
+    else
+    {
+        MeshInfo("Mesh Wan interface name is not set returning\n");
+        return 0;
+    }
 
     rc = v_secure_system("ovs-vsctl add-br %s",meshWANIfname);
     rc = v_secure_system("ifconfig %s up",meshWANIfname);
@@ -2273,6 +2280,8 @@ get_wan_bridge()
     {
         meshWANIfname = (char *) malloc(MAX_IFNAME_LEN);
 
+        memset(meshWANIfname, '\0',MAX_IFNAME_LEN);
+
         if (PSM_Get_Record_Value2(bus_handle, g_Subsystem,
                     MESH_WAN_INTERFACE, NULL, &val) == CCSP_SUCCESS)
         {
@@ -2292,6 +2301,8 @@ get_wan_bridge()
                     ret = false;
                 }
             }
+            else
+               ret = false;
         }
         else
             ret = false;
