@@ -4947,7 +4947,19 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
         }
     }
     //setting SM_APP disble state
-      g_pMeshAgent->SM_Disable = Mesh_GetEnabled("sm_app_disable");
+    out_val[0]='\0';
+    if(Mesh_SysCfgGetStr("sm_app_disable", out_val, sizeof(out_val)) == 0)
+    {
+        rc = strcmp_s("false",strlen("false"),out_val,&ind);
+        ERR_CHK(rc);
+        if((!ind) && (rc == EOK))
+        {
+          g_pMeshAgent->SM_Disable = false;
+          return;
+        }
+    }
+    Mesh_SetSMAPP(true);
+    g_pMeshAgent->SM_Disable = true;
     // MeshInfo("Exiting from %s\n",__FUNCTION__);
 }
 
