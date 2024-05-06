@@ -3898,6 +3898,12 @@ bool Mesh_SetMeshWifiOptimizationMode(eWifiOptimizationMode uValue, bool init, b
 {
     int mode = uValue;
 
+    if(is_bridge_mode_enabled() && (mode != MESH_MODE_DISABLE))
+    {
+        MeshInfo("Setting HCM mode is ignored since the Device is in Bridge Mode\n");
+        return TRUE;
+    }
+
     if((mode == MESH_MODE_MONITOR || mode == MESH_MODE_ENABLE) && (eth_mac_count >0))
     {
         MeshInfo("HCM Monitor/Enable Mode cant be configured if pod present, Ignoring rfc change\n");
@@ -4293,8 +4299,9 @@ void* handleMeshEnable(void *Args)
             // If the service is running, stop it
             if ((err = svcagt_get_service_state(meshServiceName)) == 1)
             {
+                bool bridge_mode_enabled = is_bridge_mode_enabled();
                 //Check for reserve mode, if in reserve mode restart opensync
-                if (isReserveModeActive && (g_pMeshAgent->meshWifiOptimizationMode == MESH_MODE_ENABLE))
+                if (isReserveModeActive && (g_pMeshAgent->meshWifiOptimizationMode == MESH_MODE_ENABLE) && (!bridge_mode_enabled))
                 {
                     if ((err = mesh_waitRestart()) != 0)
                     {
@@ -4307,6 +4314,12 @@ void* handleMeshEnable(void *Args)
                 else
                 {
                     // returns "0" on success
+                    if (bridge_mode_enabled)
+                    {
+                        isReserveModeActive = false;
+                        g_pMeshAgent->meshWifiOptimizationMode = MESH_MODE_DISABLE;
+                        Mesh_SetMeshWifiOptimizationMode(MESH_MODE_DISABLE, false, true);
+                    }
                     if ((err = svcagt_set_service_state(meshServiceName, false)) != 0)
                     {
                         meshSetSyscfg(0, true);
@@ -4686,7 +4699,13 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
     }
     else
     {
-        Mesh_SetMeshWifiOptimizationMode(mode_val, true, false);
+        if(is_bridge_mode_enabled())
+        {
+            MeshInfo("Device is in Bridge mode, Setting hcm mode to Disable\n");
+            Mesh_SetMeshWifiOptimizationMode(MESH_MODE_DISABLE, false, true);
+        }
+        else
+            Mesh_SetMeshWifiOptimizationMode(mode_val, true, false);
     }
 
     out_val[0]='\0';

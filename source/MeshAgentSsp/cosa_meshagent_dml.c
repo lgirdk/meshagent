@@ -821,6 +821,12 @@ MeshAgent_SetParamBoolValue
               }
          }
          else {
+              if(is_bridge_mode_enabled() && g_pMeshAgent->meshWifiOptimizationMode != MESH_MODE_DISABLE)
+              {
+                  MeshInfo("In bridge mode, meshWifiOptimization mode is switched to Disabled\n");
+                  Mesh_SetMeshWifiOptimizationMode(MESH_MODE_DISABLE, false, true);
+              }
+
               MeshInfo("Mesh disabled, Disable Ethernet bhaul if enabled\n");
               if( g_pMeshAgent->PodEthernetBackhaulEnable)
               {
