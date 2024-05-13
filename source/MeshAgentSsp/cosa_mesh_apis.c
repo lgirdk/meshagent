@@ -5421,6 +5421,7 @@ static void *Mesh_sysevent_handler(void *data)
     async_id_t wifi_init_asyncid;
     async_id_t wifi_ssidName_asyncid;
     async_id_t wifi_ssidChanged_asyncid;
+    async_id_t wifi_offChanEnable_asyncid;
 #ifdef ONEWIFI
     async_id_t onewifi_xle_extender_mode_asyncid;
 #endif
@@ -5450,7 +5451,7 @@ static void *Mesh_sysevent_handler(void *data)
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_SSID_CHANGED].sysStr,              TUPLE_FLAG_EVENT);
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_SSID_CHANGED].sysStr,              &wifi_ssidChanged_asyncid);
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_OFF_CHAN_ENABLE].sysStr,           TUPLE_FLAG_EVENT);
-    sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_OFF_CHAN_ENABLE].sysStr,           &wifi_ssidChanged_asyncid);
+    sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_OFF_CHAN_ENABLE].sysStr,           &wifi_offChanEnable_asyncid);
 #ifdef ONEWIFI
     sysevent_set_options(sysevent_fd,     sysevent_token, meshSyncMsgArr[MESH_WIFI_EXTENDER_MODE].sysStr,              TUPLE_FLAG_EVENT);
     sysevent_setnotification(sysevent_fd, sysevent_token, meshSyncMsgArr[MESH_WIFI_EXTENDER_MODE].sysStr,              &onewifi_xle_extender_mode_asyncid);
