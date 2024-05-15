@@ -14,13 +14,29 @@ fi
 CHANNEL_SET_DONE=/tmp/channel_set_done
 set_channel()
 {
-    cfg -a AP_PRIMARY_CH_2=44
+    if [ "$MODEL_NUM" = "TG2492" ]
+    then
+        if [ "$(cfg -v AP_PRIMARY_CH_2)" = "44" ]
+        then
+            cfg -a AP_PRIMARY_CH_2=0
+        fi
+        cfg -a AP_PRIMARY_CH=44
+    else
+        cfg -a AP_PRIMARY_CH_2=44
+    fi
+
     cfg -c
 }
 
 reset_channel()
 {
-    cfg -a AP_PRIMARY_CH_2=0
+    if [ "$MODEL_NUM" = "TG2492" ]
+    then
+        cfg -a AP_PRIMARY_CH=0
+    else
+        cfg -a AP_PRIMARY_CH_2=0
+    fi
+
     cfg -c
 }
 
