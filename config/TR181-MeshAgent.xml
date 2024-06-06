@@ -70,6 +70,22 @@
                                     </parameters>
                                 </object>
                                 <object>
+                                    <name>XleAdaptiveFh</name>
+                                    <objectType>object</objectType>
+                                    <functions>
+                                        <func_GetParamBoolValue>XleAdaptiveFh_GetParamBoolValue</func_GetParamBoolValue>
+                                        <func_SetParamBoolValue>XleAdaptiveFh_SetParamBoolValue</func_SetParamBoolValue>
+                                    </functions>
+                                    <parameters>
+                                        <parameter>
+                                            <name>Enable</name>
+                                            <type>boolean</type>
+                                            <syntax>bool</syntax>
+                                            <writable>true</writable>
+                                        </parameter>
+                                    </parameters>
+                                </object>
+                                <object>
                                     <name>MeshRetryReduction</name>
                                     <objectType>object</objectType>
                                     <functions>

@@ -36,6 +36,7 @@ _COSA_DATAMODEL_MESHAGENT
     BOOL                        GreAccEnable;
     BOOL                        OpensyncEnable;
     BOOL                        SM_Disable;
+    BOOL                        XleAdaptiveFh_Enable;
     BOOL                        CacheEnable;
     BOOL                        SecuritySchemaLegacyEnable;
     BOOL                        MeshRetryOptimized;

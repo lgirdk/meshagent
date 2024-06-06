@@ -1897,6 +1897,29 @@ bool Mesh_GetEnabled(const char *name)
     return enabled;
 }
 
+bool Mesh_GetEnabled_State(const char *name)
+{
+    unsigned char out_val[128];
+    errno_t rc       = -1;
+    int     ind      = -1;
+    bool enabled = false;
+
+    // MeshInfo("Entering into %s\n",__FUNCTION__);
+
+    out_val[0]='\0';
+    if(Mesh_SysCfgGetStr(name, out_val, sizeof(out_val)) == 0)
+    {
+        rc = strcmp_s("1",strlen("1"),out_val,&ind);
+        ERR_CHK(rc);
+        if((!ind) && (rc == EOK))
+        {
+            enabled = true;
+        }
+    }
+
+    return enabled;
+}
+
 static void changeChBandwidth(int radioId, int channelBw)
 {
   CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
@@ -2621,6 +2644,38 @@ static bool meshSet_sm_app_Syscfg(bool enable)
     else
     {
         MeshInfo("SMAPP disable set in the syscfg successfully\n");
+        success = true;
+    }
+
+    return success;
+}
+
+static bool meshSet_XleAdaptiveFh_Syscfg(bool enable)
+{
+    int i = 0;
+    bool success = false;
+
+    MeshInfo("%s Setting XleAdaptiveFh_State in syscfg to %d\n", __FUNCTION__, enable);
+    if(Mesh_SysCfgSetStr("XleAdaptiveFh_State", (enable?"1":"0"), true) != 0)
+    {
+        MeshInfo("Failed to set the XleAdaptiveFh_State in syscfg, retrying 5 times\n");
+        for(i=0; i<5; i++)
+        {
+            if(!Mesh_SysCfgSetStr("XleAdaptiveFh_State", (enable?"1":"0"), true))
+            {
+                MeshInfo("XleAdaptiveFh_State syscfg set passed in %d attempt\n", i+1);
+                success = true;
+                break;
+            }
+            else
+            {
+                MeshInfo("XleAdaptiveFh_State syscfg set retrial failed in %d attempt\n", i+1);
+            }
+        }
+    }
+    else
+    {
+        MeshInfo("XleAdaptiveFh_State set in the syscfg successfully\n");
         success = true;
     }
 
@@ -4097,6 +4152,12 @@ bool Mesh_SetSMAPP(bool enable)
    return meshSet_sm_app_Syscfg(enable);
 }
 
+bool Mesh_SetXleAdaptiveFh(bool enable)
+{
+   Mesh_sendRFCUpdate("XleAdaptiveFhFeature.Enable", enable ? "true" : "false", rfc_boolean);
+   return meshSet_XleAdaptiveFh_Syscfg(enable);
+}
+
 int getMeshErrorCode()
 {
     return meshError;
@@ -4997,6 +5058,9 @@ static void Mesh_SetDefaults(ANSC_HANDLE hThisObject)
            }
         }
     }
+
+    g_pMeshAgent->XleAdaptiveFh_Enable = Mesh_GetEnabled_State("XleAdaptiveFh_State");
+
     //setting SM_APP disble state
     out_val[0]='\0';
     if(Mesh_SysCfgGetStr("sm_app_disable", out_val, sizeof(out_val)) == 0)

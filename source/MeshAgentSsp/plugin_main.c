@@ -65,6 +65,8 @@ COSA_Init
     pPlugInfo->RegisterFunction(pPlugInfo->hContext, "MeshAgent_Validate",             MeshAgent_Validate);
     pPlugInfo->RegisterFunction(pPlugInfo->hContext, "MeshAgent_Commit",               MeshAgent_Commit);
     pPlugInfo->RegisterFunction(pPlugInfo->hContext, "MeshAgent_Rollback",  MeshAgent_Rollback);
+    pPlugInfo->RegisterFunction(pPlugInfo->hContext, "XleAdaptiveFh_GetParamBoolValue",  XleAdaptiveFh_GetParamBoolValue);
+    pPlugInfo->RegisterFunction(pPlugInfo->hContext, "XleAdaptiveFh_SetParamBoolValue",  XleAdaptiveFh_SetParamBoolValue);
     
 
     /* Create MeshAgent Object for Settings */

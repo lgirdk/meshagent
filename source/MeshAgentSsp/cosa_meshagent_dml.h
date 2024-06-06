@@ -69,6 +69,14 @@ OVS_GetParamBoolValue
     );
 
 BOOL
+XleAdaptiveFh_GetParamBoolValue
+    (
+        ANSC_HANDLE                 hInsContext,
+        char*                       ParamName,
+        BOOL*                       pBool
+    );
+
+BOOL
 GreAcc_GetParamBoolValue
     (
         ANSC_HANDLE                 hInsContext,
@@ -111,6 +119,14 @@ MeshAgent_SetParamBoolValue
 
 BOOL
 OVS_SetParamBoolValue
+    (
+        ANSC_HANDLE                 hInsContext,
+        char*                       ParamName,
+        BOOL                        bValue
+    );
+
+BOOL
+XleAdaptiveFh_SetParamBoolValue
     (
         ANSC_HANDLE                 hInsContext,
         char*                       ParamName,

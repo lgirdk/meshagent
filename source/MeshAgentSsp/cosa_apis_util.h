@@ -90,6 +90,7 @@ void Mesh_SendEthernetMac(char *mac);
 bool Mesh_SetOVS(bool enable, bool init, bool commitSyscfg);
 bool Mesh_SetSMAPP(bool enable);
 bool Mesh_SetMeshEthBhaul(bool enable, bool init, bool commitSyscfg);
+bool Mesh_SetXleAdaptiveFh(bool enable);
 bool Mesh_SetXleModeCloudCtrlEnable(bool enable, bool init, bool commitSyscfg);
 void Mesh_SetCacheStatus(bool enable, bool init, bool commitSyscfg);
 void Mesh_SetSecuritySchemaLegacy(bool enable, bool init, bool commitSyscfg);

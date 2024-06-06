@@ -312,6 +312,27 @@ OVS_GetParamBoolValue
     return FALSE;
 }
 
+BOOL
+XleAdaptiveFh_GetParamBoolValue
+    (
+        ANSC_HANDLE                 hInsContext,
+        char*                       ParamName,
+        BOOL*                       pBool
+    )
+{
+    UNREFERENCED_PARAMETER(hInsContext);
+
+    if (strcmp(ParamName, "Enable") == 0)
+    {
+        *pBool = g_pMeshAgent->XleAdaptiveFh_Enable;
+        return TRUE;
+    }
+
+    MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
+    return FALSE;
+}
+
 /**********************************************************************
 
     caller:     owner of this object
@@ -991,6 +1012,31 @@ OVS_SetParamBoolValue
     {
         MeshInfo("OVS mode set with commit\n");
         return Mesh_SetOVS(bValue,false,true);
+    }
+
+    MeshWarning("Unsupported parameter '%s'\n", ParamName);
+
+    return FALSE;
+}
+
+BOOL
+XleAdaptiveFh_SetParamBoolValue
+    (
+        ANSC_HANDLE                 hInsContext,
+        char*                       ParamName,
+        BOOL                        bValue
+    )
+{
+    UNREFERENCED_PARAMETER(hInsContext);
+
+    if (strcmp(ParamName, "Enable") == 0)
+    {
+       MeshInfo("XleAdaptiveFh_State set with commit\n");
+       if(Mesh_SetXleAdaptiveFh(bValue))
+       {
+          g_pMeshAgent->XleAdaptiveFh_Enable = bValue;
+          return TRUE;
+       }
     }
 
     MeshWarning("Unsupported parameter '%s'\n", ParamName);
