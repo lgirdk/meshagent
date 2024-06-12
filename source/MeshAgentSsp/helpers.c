@@ -374,12 +374,13 @@ char *client_profile_event_data_get()
 
 void save_device_profile_tofile(dp_doc_t *dp)
 {
+    int i;
     cJSON *root = cJSON_CreateObject();
     cJSON *clienttosteeringprofile = cJSON_CreateArray();
 
     cJSON_AddItemToObject(root, "clienttosteeringprofile", clienttosteeringprofile);
 
-    for (int i = 0; i < dp->count; i++) {
+    for (i = 0; i < dp->count; i++) {
         cJSON_AddItemToArray(clienttosteeringprofile, create_profile_object((dp->clients+i)));
     }
     char *string = cJSON_PrintUnformatted(root);
@@ -412,12 +413,13 @@ cJSON* create_ai_profile_object(interference_t    *data)
 
 void save_ai_profile_tofile(ai_doc_t *ai)
 {
+    int i;
     cJSON *root = cJSON_CreateObject();
     cJSON *interference = cJSON_CreateArray();
 
     cJSON_AddItemToObject(root, "interference", interference);
 
-    for (int i = 0; i < ai->count; i++) {
+    for (i = 0; i < ai->count; i++) {
         cJSON_AddItemToArray(interference, create_ai_profile_object((ai->ai_data+i)));
     }
     char *string = cJSON_PrintUnformatted(root);
@@ -690,7 +692,9 @@ void save_steering_profile_tofile(sp_doc_t *sp)
     cJSON_AddItemToObject(meshsteeringprofiles, "devicespecificprofiles", devicespecificprofiles);
     if(sp->device)
     {
-        for (int i = 0; i < sp->device->count; i++)
+        int i;
+
+        for (i = 0; i < sp->device->count; i++)
         {
             cJSON *profile = cJSON_CreateObject();
             cJSON_AddItemToArray(devicespecificprofiles, profile);
@@ -2759,7 +2763,9 @@ void destroy_spsteeringdoc(void *data)
         }
         if(NULL != mb->device)
         {
-            for (int i = 0;i < mb->device->count;i++)
+            int i;
+
+            for (i = 0;i < mb->device->count;i++)
             {
                 if(mb->device->profiles[i].bandSteering)
                 {
