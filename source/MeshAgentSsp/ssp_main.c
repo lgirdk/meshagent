@@ -79,12 +79,12 @@ int  cmd_dispatch(int  command)
                 char                            CName[256];
 
                 if ( g_Subsystem[0] != 0 )
-                {
-                    _ansc_sprintf(CName, "%s%s", g_Subsystem, gpMeshAgentCfg->ComponentId);
+                {    /*CID 62739 May result in a security violation The called function is unsafe for security related */
+                    snprintf(CName, sizeof(CName), "%s%s", g_Subsystem, gpMeshAgentCfg->ComponentId);
                 }
                 else
                 {
-                    _ansc_sprintf(CName, "%s", gpMeshAgentCfg->ComponentId);
+                    snprintf(CName, sizeof(CName), "%s", gpMeshAgentCfg->ComponentId);
                 }
 
                 MeshInfo("ssp_Mbi_MessageBusEngage() called\n");
