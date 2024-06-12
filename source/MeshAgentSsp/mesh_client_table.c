@@ -221,7 +221,8 @@ bool HashAdd(eMeshIfaceType iface, char *mac, char *host)
                 if(rc != EOK)
 		{
 		    ERR_CHK(rc);
-		    success = false;
+            /* 339790 Unused value */
+		    //success = false;
 		}
             }
             if (host != NULL) {
@@ -229,7 +230,7 @@ bool HashAdd(eMeshIfaceType iface, char *mac, char *host)
 		if(rc != EOK)
                 {
                     ERR_CHK(rc);
-                    success = false;
+                    //success = false;
                 }
             }
             // Now find our place in the hash bucket
