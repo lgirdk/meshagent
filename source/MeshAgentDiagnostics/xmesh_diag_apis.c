@@ -381,7 +381,13 @@ static bool check_default_route(char* default_route) {
  * @param[in]   num_cmds    Number of commands
  */
 static void xmesh_print_dumps(commands_t *commands, int num_cmds) {
-    char buf[MAX_BUFFER_SIZE];
+    /*CID 337459 stack_use_local_overflow Local variable buf uses 32768 bytes of stack space, which exceeds the maximum single use of 10000 bytes.*/
+    char* buf = malloc(MAX_BUFFER_SIZE);
+    if (buf == NULL)
+    {
+       LOGDUMPERROR("Memory allocation failed for buf\n");
+       return;
+    }
     commands_t command;
     int i;
 
@@ -393,6 +399,7 @@ static void xmesh_print_dumps(commands_t *commands, int num_cmds) {
         }
         LOGDUMPINFO("%s%s\n",command.desc,buf);
     }
+    free(buf);
 }
 
 // =================== XLE Diagnostics APIs =================== //
