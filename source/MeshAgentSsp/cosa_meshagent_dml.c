@@ -384,35 +384,41 @@ MWO_GetParamStringValue
     if(strcmp(ParamName, "Configs") == 0)
     {
         MeshInfo(("MWO Configs Get Not supported\n"));
-        strcpy(pValue, "");
+        /*CID 379980 The called function is unsafe for security related code */
+        strncpy(pValue, "", *pUlSize - 1);
+        pValue[*pUlSize - 1] = '\0'; // Ensure null-termination
         return 0;
     }
 
     if(strcmp(ParamName, "SteeringProfileData") == 0)
     {
         MeshDebug(("SteeringProfileData Get Not supported\n"));
-        strcpy(pValue, "");
+        strncpy(pValue, "", *pUlSize - 1);
+        pValue[*pUlSize - 1] = '\0'; // Ensure null-termination
         return 0;
     }
 
     if(strcmp(ParamName, "ClientProfileData") == 0)
     {
         MeshDebug(("ClientProfileData Get Not supported\n"));
-        strcpy(pValue, "");
+        strncpy(pValue, "", *pUlSize - 1);
+        pValue[*pUlSize - 1] = '\0'; // Ensure null-termination
         return 0;
     }
 
     if(strcmp(ParamName, "StatsConfigData") == 0)
     {
         MeshInfo(("StatsConfigData Get Not supported\n"));
-        strcpy(pValue, "");
+        strncpy(pValue, "", *pUlSize - 1);
+        pValue[*pUlSize - 1] = '\0'; // Ensure null-termination
         return 0;
     }
 
     if(strcmp(ParamName, "AugmentedInterference") == 0)
     {
         MeshInfo("AugmentedInterference Get Not supported\n");
-        strcpy(pValue, "");
+        strncpy(pValue, "", *pUlSize - 1);
+        pValue[*pUlSize - 1] = '\0'; // Ensure null-termination
         return 0;
     }
 
@@ -663,14 +669,17 @@ MeshAgent_GetParamStringValue
 
     if (strcmp(ParamName, "X_RDKCENTRAL-COM_Connected-Client") == 0)
     {
-        strcpy(pValue, "");
+        /*CID 143931 The called function is unsafe for security related code*/
+        strncpy(pValue, "", *pUlSize - 1);
+        pValue[*pUlSize - 1] = '\0'; // Ensure null-termination
         return 0;
     }
 
     if (strcmp(ParamName, "Data") == 0)
     {
         MeshInfo(("Data Get Not supported\n"));
-        strcpy(pValue, "");
+        strncpy(pValue, "", *pUlSize - 1);
+        pValue[*pUlSize - 1] = '\0'; // Ensure null-termination
         return 0;
     }
 
