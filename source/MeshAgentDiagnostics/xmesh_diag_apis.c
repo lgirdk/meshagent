@@ -283,7 +283,8 @@ static int cmd_exec(char *cmd, char *out, size_t out_sz) {
             LOGERROR("Exceeded buffer size, clipping output\n");
             break;
         }
-        strcpy(out + total_read, buf);
+        /*CID 337463 The destination of a strcpy call must have enough space to accept the source.*/
+        strncpy(out + total_read, buf, out_sz - total_read - 1);
         total_read += len;
     }
 
