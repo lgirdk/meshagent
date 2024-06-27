@@ -422,8 +422,8 @@ MWO_GetParamStringValue
         strcpy(pValue, "");
         return 0;
     }
-
-    MeshError("Unsupported Namespace:%s size:%ln\n", ParamName,pUlSize);
+    /*CID 379982  Argument pUlSize to format specifier %ln was expected to have type long * but has type ULONG */
+    MeshError("Unsupported Namespace:%s size:%lu\n", ParamName,*pUlSize);
 
     return -1;
 }
