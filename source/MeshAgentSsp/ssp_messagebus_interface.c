@@ -165,9 +165,10 @@ ANSC_STATUS ssp_Mbi_MessageBusEngage(char * component_id,char * config_file,char
 int ssp_Mbi_Initialize(void * user_data)
 {
     UNREFERENCED_PARAMETER(user_data);
-    ANSC_STATUS             returnStatus    = ANSC_STATUS_SUCCESS;
-
-    return ( returnStatus == ANSC_STATUS_SUCCESS ) ? 0 : 1;
+    /*it always return 0 so i comment this line*/
+    //ANSC_STATUS             returnStatus    = ANSC_STATUS_SUCCESS;
+    /*CID 56209  Execution cannot reach the expression 1 inside this statement*/
+    return 0;
 }
 
 
