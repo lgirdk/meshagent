@@ -275,7 +275,9 @@ bool ping_ip (char *ip)
             MeshError("Exceeded buffer size, clipping output\n");
             break;
         }
-        strcpy(out + total_read, buf);
+        /*CID 346812 The destination of a strcpy call must have enough space to accept the source.*/
+      
+        strncpy(out + total_read, buf,MAX_BUFF - total_read - 1);
         total_read += len;
     }
 
