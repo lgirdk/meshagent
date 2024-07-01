@@ -2835,9 +2835,17 @@ bool Mesh_SetXleModeCloudCtrlEnable(bool enable, bool init, bool commitSyscfg)
 static void Mesh_CreatePodVlan(MeshTunnelSetVlan *conf)
 {
     int rc = -1;
-
+    /*CID 337467  Copy-paste error (COPY_PASTE_ERROR) copy_paste_error bridge in conf->bridge looks like a copy-paste error.*/
     rc = v_secure_system("ovs-vsctl add-br %s; /sbin/ifconfig %s up",conf->bridge,conf->bridge);
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to add bridge %s\n", conf->bridge);
+    }
     rc = v_secure_system("/sbin/vconfig add %s %d;/sbin/ifconfig %s up",conf->parent_ifname,conf->vlan,conf->ifname );
+    if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        MeshError("Failed to add VLAN %d to %s\n", conf->vlan, conf->parent_ifname);
+    }
 
     rc = v_secure_system("ovs-vsctl add-port %s %s",conf->bridge,conf->ifname);
     if (!WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
