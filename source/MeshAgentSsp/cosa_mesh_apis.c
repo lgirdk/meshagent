@@ -449,8 +449,9 @@ static int Get_MeshSyncType(char * name ,eMeshSyncType *type_ptr)
        return 0;
 
     strlength = strlen( name );
-
-    for (i = 0; i < MESH_SYNC_MSG_TOTAL; i++) {
+    /*CID *336357  Overrunning array meshSyncMsgArr of 49 12-byte elements at element index 50 (byte offset 611) using index i*/
+    int arraySize = sizeof(meshSyncMsgArr) / sizeof(meshSyncMsgArr[0]);
+    for (i = 0; i < arraySize; i++) {
 
         rc = strcmp_s(name, strlength, meshSyncMsgArr[i].sysStr, &ind);
         ERR_CHK(rc);
