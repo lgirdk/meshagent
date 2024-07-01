@@ -1728,8 +1728,14 @@ int Mesh_GetUrl(char *retBuf, int bufSz)
     errno_t rc = -1;
 
     // MeshInfo("Entering into %s\n",__FUNCTION__);
-
-    Mesh_SysCfgGetStr("mesh_url", retBuf, bufSz);
+    /*CID 377534  Calling Mesh_SysCfgGetStr without checking return value (as is done elsewhere 17 out of 18 times).*/
+    if (Mesh_SysCfgGetStr("mesh_url", retBuf, bufSz) != 0)
+    {
+        
+        MeshError("Error in retrieving mesh_url\n");
+        return false;
+    }
+    
 
     if (retBuf[0] == 0)
     {
