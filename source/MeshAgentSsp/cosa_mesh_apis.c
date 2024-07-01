@@ -359,6 +359,9 @@ MeshSync_MsgItem meshSyncMsgArr[] = {
     {MESH_BRHOME_IP,                        "MESH_BRHOME_IP",                        "remote_ssh_server_ip"},
     {MESH_TRIGGER_DISASSOC,                 "MESH_TRIGGER_DISASSOC",                "mesh_trigger_disaasociation_req"}
 #endif
+  ,
+  {MESH_EBH_STATUS,                       "MESH_EBH_STATUS",                      "ebh_status"},
+  {MESH_EBH_INFO,                         "MESH_EBH_INFO",                        "ebh_info"}
     };
 typedef struct
 {
@@ -706,7 +709,10 @@ static void Mesh_ProcessSyncMessage(MeshSync rxMsg)
 {
     // Parse out the messages and send the sysevents
     // Check to see if this is a valid message
-    if (rxMsg.msgType >= MESH_SYNC_MSG_TOTAL)
+    /*CID 143971  Overrunning array meshSyncMsgArr of 49 12-byte elements at element index 50 (byte offset 611) using index rxMsg.msgType */
+
+    // Check if rxMsg.msgType is within bounds
+    if (rxMsg.msgType >= MESH_SYNC_MSG_TOTAL || rxMsg.msgType < 0 || rxMsg.msgType >= sizeof(meshSyncMsgArr) / sizeof(meshSyncMsgArr[0]))
     {
         MeshError("Error unknown message type %d - skipping\n", rxMsg.msgType);
         return;
