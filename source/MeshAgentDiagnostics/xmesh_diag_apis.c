@@ -457,7 +457,8 @@ static bool xle_get_backhaul_sta(char* sta) {
     // Check the backhaul interface reported by Connection_Manager_Uplink table
     snprintf(cmd, sizeof(cmd), "/usr/opensync/tools/ovsh -r s Connection_Manager_Uplink -w is_used==true if_name");
     cmd_exec(cmd,buf,sizeof(buf));
-    if (!strlen(buf) || sscanf(buf, "g-%s", sta) <= 0) {
+    /*CID 337461  sscanf assumes an arbitrarily long string, callers must use correct precision specifiers or never use sscanf.*/
+    if (!strlen(buf) || sscanf(buf, "g-%15s", sta) <= 0) {
         LOGERROR("Connection_Manager_Uplink does not indicate any valid backhaul interface \"%s\"\n", sta);
         return false;
     }
