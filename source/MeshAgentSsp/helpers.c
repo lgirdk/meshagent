@@ -769,10 +769,19 @@ void* blob_data_convert( const void *buf, size_t len, eBlobType blob_type )
         default:
         break;
     }
-    return helper_convert( buf, len, blob_size, meshBlobNameArr[blob_type].blob_name_str,
+    /*CID 379977 paasing null pointer destroy to helper_convert,which dereferences it.*/
+    if(process != NULL && destroy != NULL)
+    {
+      return helper_convert( buf, len, blob_size, meshBlobNameArr[blob_type].blob_name_str,
                             MSGPACK_OBJECT_ARRAY, true,
                            (process_fn_t) process,
                            (destroy_fn_t) destroy );
+    }
+    else
+    {
+        MeshError("Error: process or destroy function is NULL.\n");
+        return NULL;
+    }
 }
 
 /* See helper.h for details. */
